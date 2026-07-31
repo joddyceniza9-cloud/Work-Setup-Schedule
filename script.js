@@ -786,46 +786,66 @@ function hasWaveSelection(row) {
 }
 
 function hasProjectionDriver(row) {
-    if (!hasSetupInput(row)) {
-        return false;
-    }
-    if (row.wfoWave === "Justified" || row.wfoWave === "Use WFH Credit") {
-        return false;
-    }
-    if (row.wfoWave === "Change Schedule") {
-        return Boolean(`${row.changeScheduleMonth || ""}`.trim() && `${row.changeScheduleDate || ""}`.trim());
-    }
-    return true;
+    return getProjectedOutcomesFromSourceRow(row).length > 0;
 }
 
 function getProjectedDateForSourceRow(row) {
-    if (!hasProjectionDriver(row)) {
-        return "";
-    }
-    if (row.wfoWave === "Change Schedule") {
-        const monthIndex = parseMonthValue(row.changeScheduleMonth);
-        if (monthIndex !== null && row.changeScheduleDate) {
-            return buildDateValue(Number(state.selectedYear), monthIndex, row.changeScheduleDate);
-        }
-    }
-    return addDays(row.dateValue, 7);
+    const [firstProjection] = getProjectedOutcomesFromSourceRow(row);
+    return firstProjection?.targetDate || "";
 }
 
 function getProjectedOutcomeFromSourceRow(row) {
-    if (!hasProjectionDriver(row)) {
+    const [firstProjection] = getProjectedOutcomesFromSourceRow(row);
+    return firstProjection?.outcome || null;
+}
+
+function getBaseProjectedOutcomeFromSourceRow(row) {
+    if (!hasSetupInput(row)) {
         return null;
     }
-    if (row.wfoWave === "Change Schedule") {
-        return { setup: "WFO", reasons: ["Change Schedule"] };
+    if (row.wfoWave === "Justified" || row.wfoWave === "Use WFH Credit") {
+        return null;
     }
+
     const reasons = getWfoReasons(row).filter((reason) => reason !== "WFO Wave" && reason !== "Change Schedule");
     if (reasons.length) {
         return { setup: "WFO", reasons };
     }
-    if (hasSetupInput(row)) {
-        return { setup: "WFH", reasons: ["Eligible"] };
+
+    return { setup: "WFH", reasons: ["Eligible"] };
+}
+
+function getProjectedOutcomesFromSourceRow(row) {
+    const projections = [];
+    const baseOutcome = getBaseProjectedOutcomeFromSourceRow(row);
+    if (baseOutcome) {
+        projections.push({
+            targetDate: addDays(row.dateValue, 7),
+            source: "base",
+            outcome: baseOutcome,
+        });
     }
-    return null;
+
+    if (row.wfoWave === "Change Schedule") {
+        const monthIndex = parseMonthValue(row.changeScheduleMonth);
+        if (monthIndex !== null && row.changeScheduleDate) {
+            projections.push({
+                targetDate: buildDateValue(Number(state.selectedYear), monthIndex, row.changeScheduleDate),
+                source: "change",
+                outcome: { setup: "WFO", reasons: ["Change Schedule"] },
+            });
+        }
+    }
+
+    const dedupedByDate = new Map();
+    projections.forEach((entry) => {
+        const existing = dedupedByDate.get(entry.targetDate);
+        if (!existing || (existing.outcome.setup !== "WFO" && entry.outcome.setup === "WFO")) {
+            dedupedByDate.set(entry.targetDate, entry);
+        }
+    });
+
+    return Array.from(dedupedByDate.values());
 }
 
 function getOutcomeForTargetRow(employee, row) {
@@ -834,7 +854,12 @@ function getOutcomeForTargetRow(employee, row) {
     }
     const matches = employee.rows
         .filter((sourceRow) => sourceRow.id !== row.id)
-        .map((sourceRow) => ({ sourceRow, targetDate: getProjectedDateForSourceRow(sourceRow), outcome: getProjectedOutcomeFromSourceRow(sourceRow) }))
+        .flatMap((sourceRow) => getProjectedOutcomesFromSourceRow(sourceRow)
+            .map((projection) => ({
+                sourceRow,
+                targetDate: projection.targetDate,
+                outcome: projection.outcome,
+            })))
         .filter((entry) => entry.targetDate === row.dateValue && entry.outcome);
 
     if (!matches.length) {
@@ -852,26 +877,27 @@ function getOutcomeForTargetRow(employee, row) {
 }
 
 function ensureProjectedResultRow(employee, row) {
-    const targetDateValue = getProjectedDateForSourceRow(row);
-    const outcome = getProjectedOutcomeFromSourceRow(row);
-    if (!targetDateValue || !outcome) {
+    const projections = getProjectedOutcomesFromSourceRow(row);
+    if (!projections.length) {
         return;
     }
-    const existingTargetRow = employee.rows.find((entry) => entry.id !== row.id && entry.dateValue === targetDateValue);
-    if (existingTargetRow) {
-        existingTargetRow.generatedByRowId = row.id;
-        return;
-    }
-    employee.rows.push(createRow(targetDateValue, { generatedByRowId: row.id }));
+
+    projections.forEach((projection) => {
+        const existingTargetRow = employee.rows.find((entry) => entry.id !== row.id && entry.dateValue === projection.targetDate);
+        if (existingTargetRow) {
+            if (!existingTargetRow.generatedByRowId) {
+                existingTargetRow.generatedByRowId = row.id;
+            }
+            return;
+        }
+        employee.rows.push(createRow(projection.targetDate, { generatedByRowId: row.id }));
+    });
 }
 
 function clearProjectedResultFromSource(employee, sourceRowId) {
     employee.rows.forEach((entry) => {
         if (entry.generatedByRowId === sourceRowId) {
             entry.generatedByRowId = "";
-            if (!hasSetupInput(entry) && !entry.wfoWave) {
-                entry.workSetup = "";
-            }
         }
     });
 }
@@ -904,6 +930,113 @@ function getWorkSetupClass(row, employee) {
         return "setup-badge";
     }
     return "";
+}
+
+function getWfoReasonTooltip(row, employee) {
+    const targetOutcome = getOutcomeForTargetRow(employee, row);
+    if (targetOutcome?.outcome?.setup !== "WFO") {
+        return "";
+    }
+    const reasons = targetOutcome.outcome.reasons || [];
+    const labels = [];
+    if (reasons.includes("Processing Time")) {
+        labels.push("Did not Target processing time");
+    }
+    if (reasons.includes("Accuracy")) {
+        labels.push("With Error");
+    }
+    if (reasons.includes("Unapproved Leave")) {
+        labels.push("SL or EL");
+    }
+    if (reasons.includes("Change Schedule")) {
+        labels.push("Change Schedule");
+    }
+    return labels.join(", ");
+}
+
+function getPerformanceTriggeredWfoReasons(row) {
+    const reasons = [];
+    if (hasTargetProcessingTime() && parseDurationToSeconds(row.processingTime) > parseDurationToSeconds(state.targetProcessingTime)) {
+        reasons.push("Processing Time");
+    }
+    if (row.accuracy === "With Error") {
+        reasons.push("Accuracy");
+    }
+    if (["SL", "EL"].includes((row.unapprovedLeave || "").trim())) {
+        reasons.push("Unapproved Leave");
+    }
+    return reasons;
+}
+
+function getChangeScheduleTargetDate(row) {
+    if (row.wfoWave !== "Change Schedule") {
+        return "";
+    }
+    const monthIndex = parseMonthValue(row.changeScheduleMonth);
+    if (monthIndex === null || !row.changeScheduleDate) {
+        return "";
+    }
+    return buildDateValue(Number(state.selectedYear), monthIndex, row.changeScheduleDate);
+}
+
+function recalculateRowWorkSetup(row) {
+    if (!hasSetupInput(row)) {
+        row.workSetup = "";
+    } else if (row.wfoWave === "Change Schedule") {
+        row.workSetup = "WFO";
+    } else if (row.wfoWave === "Justified" || row.wfoWave === "Use WFH Credit") {
+        row.workSetup = "WFH";
+    } else if (hasWfoReason(row)) {
+        row.workSetup = "WFO";
+    } else {
+        row.workSetup = "WFH";
+    }
+}
+
+function resolveChangeScheduleConflictsForBaseWfo(employee, baseSourceRow) {
+    const performanceReasons = getPerformanceTriggeredWfoReasons(baseSourceRow);
+    if (!performanceReasons.length) {
+        return [];
+    }
+
+    const targetDateValue = addDays(baseSourceRow.dateValue, 7);
+    const conflicts = employee.rows.filter((entry) =>
+        entry.id !== baseSourceRow.id
+        && getChangeScheduleTargetDate(entry) === targetDateValue);
+
+    conflicts.forEach((conflictRow) => {
+        conflictRow.wfoWave = "";
+        conflictRow.changeScheduleMonth = "";
+        conflictRow.changeScheduleDate = "";
+        clearProjectedResultFromSource(employee, conflictRow.id);
+        recalculateRowWorkSetup(conflictRow);
+    });
+
+    return conflicts;
+}
+
+function formatRescheduleConflictReasons(performanceReasons) {
+    const reasons = [];
+    if (performanceReasons.includes("Processing Time")) {
+        reasons.push("Processing Time");
+    }
+    if (performanceReasons.includes("Accuracy")) {
+        reasons.push("Accuracy (With Error)");
+    }
+    if (performanceReasons.includes("Unapproved Leave")) {
+        reasons.push("SL or EL");
+    }
+
+    if (!reasons.length) {
+        return "Processing Time, Accuracy (With Error), or SL or EL";
+    }
+    if (reasons.length === 1) {
+        return reasons[0];
+    }
+    if (reasons.length === 2) {
+        return `${reasons[0]} and ${reasons[1]}`;
+    }
+    return `${reasons.slice(0, -1).join(", ")}, and ${reasons[reasons.length - 1]}`;
 }
 
 function hasSetupInput(row) {
@@ -1086,17 +1219,7 @@ function updateRow(employeeId, rowId, field, value) {
         row.changeScheduleDate = value;
     }
 
-    if (!hasSetupInput(row)) {
-        row.workSetup = "";
-    } else if (row.wfoWave === "Change Schedule") {
-        row.workSetup = "WFO";
-    } else if (row.wfoWave === "Justified" || row.wfoWave === "Use WFH Credit") {
-        row.workSetup = "WFH";
-    } else if (hasWfoReason(row)) {
-        row.workSetup = "WFO";
-    } else {
-        row.workSetup = "WFH";
-    }
+    recalculateRowWorkSetup(row);
 
     if (row.wfoWave !== "Change Schedule") {
         row.changeScheduleMonth = "";
@@ -1109,6 +1232,20 @@ function updateRow(employeeId, rowId, field, value) {
         } else {
             const reasons = getWfoReasons(row);
             row.workSetup = reasons.length ? "WFO" : "WFH";
+        }
+
+        const performanceReasons = getPerformanceTriggeredWfoReasons(row);
+        const conflictRows = resolveChangeScheduleConflictsForBaseWfo(employee, row);
+        if (conflictRows.length) {
+            const sourceList = conflictRows
+                .map((conflictRow) => {
+                    const display = getDisplayDate(conflictRow.dateValue);
+                    return `${display.month} ${display.date} ${display.day}`;
+                })
+                .join(", ");
+            const reasonText = formatRescheduleConflictReasons(performanceReasons);
+            const targetDisplayDate = getDisplayDate(addDays(row.dateValue, 7));
+            window.alert(`Please reschedule the Change request from ${sourceList}. ${targetDisplayDate.month} ${targetDisplayDate.date} ${targetDisplayDate.day} is already WFO due to ${reasonText}.`);
         }
     }
 
@@ -1166,10 +1303,29 @@ function isDateTaggedAsWfo(employee, sourceRowId, targetDateValue) {
     if (!targetRow) {
         return false;
     }
-    if (getDisplayWorkSetup(targetRow, employee) === "WFO") {
-        return true;
+
+    const matches = employee.rows
+        .filter((sourceRow) => sourceRow.id !== targetRow.id && sourceRow.id !== sourceRowId)
+        .flatMap((sourceRow) => getProjectedOutcomesFromSourceRow(sourceRow)
+            .map((projection) => ({
+                sourceRow,
+                targetDate: projection.targetDate,
+                outcome: projection.outcome,
+            })))
+        .filter((entry) => entry.targetDate === targetRow.dateValue && entry.outcome);
+
+    if (!matches.length) {
+        return false;
     }
-    return targetRow.wfoWave === "Change Schedule" || targetRow.workSetup === "WFO";
+
+    matches.sort((left, right) => {
+        if (left.outcome.setup === right.outcome.setup) {
+            return parseDateValue(right.sourceRow.dateValue) - parseDateValue(left.sourceRow.dateValue);
+        }
+        return left.outcome.setup === "WFO" ? -1 : 1;
+    });
+
+    return matches[0].outcome.setup === "WFO";
 }
 
 function applyChangeScheduleUpdate(employeeId, rowId, monthText, dayText) {
@@ -1191,6 +1347,20 @@ function applyChangeScheduleUpdate(employeeId, rowId, monthText, dayText) {
     row.changeScheduleDate = dayText;
     if (monthText && dayText) {
         const targetDateValue = buildDateValue(Number(state.selectedYear), monthIndex, dayText);
+        const defaultTargetDate = addDays(row.dateValue, 7);
+        const performanceReasons = getPerformanceTriggeredWfoReasons(row);
+        const isConflictingWithBaseWfo = Boolean(performanceReasons.length && targetDateValue === defaultTargetDate);
+        if (isConflictingWithBaseWfo) {
+            row.changeScheduleDate = "";
+            clearProjectedResultFromSource(employee, row.id);
+            ensureProjectedResultRow(employee, row);
+            syncEmployeeWfoDoneFlags(employee);
+            saveState();
+            render();
+            const sourceDate = getDisplayDate(row.dateValue);
+            window.alert(`Please reschedule the Change request of WFO from ${sourceDate.month} ${sourceDate.date} ${sourceDate.day}`);
+            return;
+        }
         if (isDateTaggedAsWfo(employee, row.id, targetDateValue)) {
             clearChangeScheduleSelection(employee, row, { keepMonth: true });
             syncEmployeeWfoDoneFlags(employee);
@@ -1201,12 +1371,9 @@ function applyChangeScheduleUpdate(employeeId, rowId, monthText, dayText) {
         }
         const existingTargetRow = employee.rows.find((entry) => entry.id !== row.id && entry.dateValue === targetDateValue);
         if (existingTargetRow) {
-            existingTargetRow.wfoWave = "";
-            existingTargetRow.workSetup = "";
-            existingTargetRow.changeScheduleMonth = "";
-            existingTargetRow.changeScheduleDate = "";
-            existingTargetRow.creditUsed = false;
-            existingTargetRow.generatedByRowId = row.id;
+            if (!existingTargetRow.generatedByRowId) {
+                existingTargetRow.generatedByRowId = row.id;
+            }
         } else {
             employee.rows.push(createRow(targetDateValue, {
                 processingTime: "",
@@ -2280,6 +2447,13 @@ function renderTable() {
         const workSetupBadge = document.createElement("span");
         workSetupBadge.className = getWorkSetupClass(row, employee);
         workSetupBadge.textContent = displaySetup === "WFO" ? `WFO ${getWfoStatusLabel(row)}` : displaySetup;
+        if (displaySetup === "WFO" && !row.wfoDone) {
+            const tooltipText = getWfoReasonTooltip(row, employee);
+            if (tooltipText) {
+                workSetupBadge.classList.add("wfo-reason-tooltip");
+                workSetupBadge.setAttribute("data-tooltip", tooltipText);
+            }
+        }
         workSetupCell.appendChild(workSetupBadge);
         tr.appendChild(workSetupCell);
 
@@ -2498,6 +2672,14 @@ function renderSummary() {
 }
 
 function renderCredits() {
+    const creditRuleText = document.getElementById("wfhCreditRuleText");
+    const weeklyTarget = getWeeklyCreditTargetNumber();
+    if (creditRuleText) {
+        creditRuleText.textContent = weeklyTarget > 0
+            ? `Every ${weeklyTarget} WFH occurrence${weeklyTarget > 1 ? "s" : ""} in a week earns 1 credit.`
+            : "Set WFH Credits per Week in Settings to enable credit earning.";
+    }
+
     const content = document.getElementById("creditsContent");
     content.innerHTML = "";
     const fragment = document.createDocumentFragment();
