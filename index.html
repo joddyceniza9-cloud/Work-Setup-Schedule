@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 
 <head>
@@ -163,16 +163,43 @@
     <div class="auth-gate-card">
       <p class="auth-kicker">Access Required</p>
       <h2>Log in to continue</h2>
-      <p>Open settings to sign up or log in as a specific user. Each user keeps a separate local copy of the schedule
-        data on this browser.</p>
+      <p>Sign up or log in as a specific user. Each user keeps a separate local copy of the schedule data on this
+        browser.</p>
       <div class="auth-gate-actions">
-        <button id="openAccessSettingsBtn" class="primary-btn">Open Access Settings</button>
+        <button id="openAuthModalBtn" class="primary-btn">Open Access Window</button>
       </div>
     </div>
   </div>
 
+  <div id="authModal" class="modal hidden" aria-hidden="true">
+    <div class="modal-card compact-modal-card auth-modal-card">
+      <div class="modal-header">
+        <h2>Account Access</h2>
+      </div>
+      <p id="authModalCurrentUserText" class="help-text settings-status">No user is logged in.</p>
+      <div class="auth-grid">
+        <label class="field">
+          <span>Username</span>
+          <input id="authUsernameInput" class="input-field" type="text" placeholder="Enter username" />
+        </label>
+        <label class="field">
+          <span>Password</span>
+          <input id="authPasswordInput" class="input-field" type="password" placeholder="Enter password" />
+        </label>
+      </div>
+      <div class="auth-actions">
+        <button id="signUpBtn" class="primary-btn" type="button">Sign Up</button>
+        <button id="logInBtn" class="secondary-btn" type="button">Log In</button>
+      </div>
+      <p id="authFeedback" class="help-text auth-feedback">Create or access a user account stored locally in this
+        browser.</p>
+      <p class="help-text">Ready to host on a single GitHub link. User accounts and schedules stay separate per
+        browser or device unless you add a shared backend later.</p>
+    </div>
+  </div>
+
   <div id="settingsModal" class="modal hidden" aria-hidden="true">
-    <div class="modal-card">
+    <div class="modal-card settings-modal-card">
       <div class="modal-header">
         <h2>Settings</h2>
         <div class="modal-actions">
@@ -181,98 +208,135 @@
         </div>
       </div>
 
-      <label class="field">
-        <span>Header Name</span>
-        <input id="headerNameInput" type="text" placeholder="Enter header name" />
-      </label>
+      <div class="settings-scroll-area">
 
-      <label class="field">
-        <span>Target Processing Time (HH:MM:SS)</span>
-        <input id="targetProcessingTimeInput" type="text" placeholder="" />
-      </label>
+        <label class="field">
+          <span>Header Name</span>
+          <input id="headerNameInput" type="text" placeholder="Enter header name" />
+        </label>
 
-      <label class="field">
-        <span>WFH Credits per Week</span>
-        <input id="weeklyWfhCreditTargetInput" type="number" min="1" />
-      </label>
+        <label class="field">
+          <span>Target Processing Time (HH:MM:SS)</span>
+          <input id="targetProcessingTimeInput" type="text" placeholder="" />
+        </label>
 
-      <div class="settings-list">
-        <div class="settings-list-header">
-          <h3>Account Access</h3>
-          <button id="logOutBtn" class="secondary-btn" type="button">Log Out</button>
+        <label class="field">
+          <span>WFH Credits per Week</span>
+          <input id="weeklyWfhCreditTargetInput" type="number" min="1" />
+        </label>
+
+        <div class="settings-list">
+          <div class="settings-list-header">
+            <h3>Active Account</h3>
+            <button id="logOutBtn" class="secondary-btn" type="button">Log Out</button>
+          </div>
+          <p id="currentUserText" class="help-text settings-status">No user is logged in.</p>
+          <div class="auth-grid">
+            <label class="field">
+              <span>Username</span>
+              <input id="accountUsernameInput" class="input-field" type="text" placeholder="Enter username" />
+            </label>
+            <label class="field">
+              <span>Password</span>
+              <input id="accountPasswordInput" class="input-field" type="password" placeholder="Enter password" />
+            </label>
+          </div>
+          <div class="auth-actions">
+            <button id="updateAccountBtn" class="primary-btn" type="button">Update Account</button>
+            <button id="deleteCurrentAccountBtn" class="danger-btn" type="button">Delete Account</button>
+          </div>
+          <p id="accountFeedback" class="help-text auth-feedback"></p>
         </div>
-        <p id="currentUserText" class="help-text settings-status">No user is logged in.</p>
-        <div class="auth-grid">
-          <label class="field">
-            <span>Username</span>
-            <input id="authUsernameInput" class="input-field" type="text" placeholder="Enter username" />
+
+        <div id="adminPanel" class="settings-list hidden" hidden>
+          <div class="settings-list-header">
+            <h3>Admin Account Center</h3>
+            <button id="clearAdminSearchBtn" class="secondary-btn" type="button">Clear Search</button>
+          </div>
+          <p class="help-text">Visible only to the admin account. Review each registered account, its saved settings,
+            and local schedule totals at a glance.</p>
+          <label class="field admin-search-field">
+            <span>Search Accounts</span>
+            <input id="adminAccountSearchInput" class="input-field" type="text"
+              placeholder="Search by username, role, header, or target" />
           </label>
-          <label class="field">
-            <span>Password</span>
-            <input id="authPasswordInput" class="input-field" type="password" placeholder="Enter password" />
-          </label>
+          <div id="adminAccountList" class="account-list admin-account-list"></div>
         </div>
-        <div class="auth-actions">
-          <button id="signUpBtn" class="primary-btn" type="button">Sign Up</button>
-          <button id="logInBtn" class="secondary-btn" type="button">Log In</button>
+
+        <div class="settings-list">
+          <div class="settings-list-header">
+            <h3>Theme Colors</h3>
+            <button id="restoreDefaultsBtn" class="secondary-btn">Restore Default</button>
+          </div>
+          <div class="color-grid">
+            <label class="field compact">
+              <span>Accent</span>
+              <input id="accentColorInput" type="color" />
+            </label>
+            <label class="field compact">
+              <span>Background</span>
+              <input id="backgroundColorInput" type="color" />
+            </label>
+            <label class="field compact">
+              <span>Surface</span>
+              <input id="surfaceColorInput" type="color" />
+            </label>
+            <label class="field compact">
+              <span>Text</span>
+              <input id="textColorInput" type="color" />
+            </label>
+          </div>
         </div>
-        <p id="authFeedback" class="help-text auth-feedback">Create or access a user account stored locally in this
-          browser.</p>
-        <p class="help-text">Ready to host on a single GitHub link. User accounts and schedules stay separate per
-          browser or device unless you add a shared backend later.</p>
-        <div id="authUserList" class="account-list"></div>
+
+        <div class="settings-list">
+          <div class="settings-list-header">
+            <h3>Quick Guide</h3>
+            <button id="openQuickGuideBtn" class="secondary-btn" type="button">Open Quick Guide</button>
+          </div>
+        </div>
+
+        <div class="settings-list">
+          <div class="settings-list-header">
+            <h3>View Tool Scope</h3>
+            <button id="viewScopeBtn" class="secondary-btn">Open Scope Info</button>
+          </div>
+        </div>
+
+        <div class="settings-list">
+          <div class="settings-list-header">
+            <h3>Employee Names</h3>
+            <button id="addEmployeeBtn" class="secondary-btn">Add Employee</button>
+          </div>
+          <div id="employeeSettingsList" class="employee-settings-list"></div>
+        </div>
+
+        <div class="settings-list">
+          <div class="settings-list-header">
+            <h3>Hard Reset</h3>
+            <button id="hardResetBtn" class="danger-btn">Reset Current Account</button>
+          </div>
+        </div>
       </div>
+    </div>
+  </div>
 
-      <div class="settings-list">
-        <div class="settings-list-header">
-          <h3>Theme Colors</h3>
-          <button id="restoreDefaultsBtn" class="secondary-btn">Restore Default</button>
+  <div id="guideModal" class="modal guide-modal hidden" aria-hidden="true">
+    <div id="guideSpotlight" class="guide-spotlight" aria-hidden="true"></div>
+    <div class="modal-card compact-modal-card guide-card">
+      <div class="modal-header">
+        <div>
+          <p class="auth-kicker">Quick Guide</p>
+          <h2 id="guideTitle">Welcome</h2>
         </div>
-        <div class="color-grid">
-          <label class="field compact">
-            <span>Accent</span>
-            <input id="accentColorInput" type="color" />
-          </label>
-          <label class="field compact">
-            <span>Background</span>
-            <input id="backgroundColorInput" type="color" />
-          </label>
-          <label class="field compact">
-            <span>Surface</span>
-            <input id="surfaceColorInput" type="color" />
-          </label>
-          <label class="field compact">
-            <span>Text</span>
-            <input id="textColorInput" type="color" />
-          </label>
-        </div>
-        <p class="help-text">Preview changes live while you choose colors. Entries are auto-saved locally and backed up
-          automatically for offline recovery.</p>
       </div>
-
-      <div class="settings-list">
-        <div class="settings-list-header">
-          <h3>View Tool Scope</h3>
-          <button id="viewScopeBtn" class="secondary-btn">Open Guide</button>
-        </div>
-        <p class="help-text">This tool is a local offline planner for employee work setup, WFO/WFH monitoring, credits,
-          dashboards, and report generation.</p>
-      </div>
-
-      <div class="settings-list">
-        <div class="settings-list-header">
-          <h3>Employee Names</h3>
-          <button id="addEmployeeBtn" class="secondary-btn">Add Employee</button>
-        </div>
-        <div id="employeeSettingsList" class="employee-settings-list"></div>
-      </div>
-
-      <div class="settings-list">
-        <div class="settings-list-header">
-          <h3>Hard Reset</h3>
-          <button id="hardResetBtn" class="danger-btn">Reset All</button>
-        </div>
-        <p class="help-text">This will clear all saved data and return the tool to a blank initial state.</p>
+      <p id="guideBody" class="help-text guide-body"></p>
+      <p id="guideStepMeta" class="help-text guide-step-meta"></p>
+      <div id="guideDots" class="guide-dots" aria-hidden="true"></div>
+      <div class="guide-actions">
+        <button id="previousGuideBtn" class="secondary-btn" type="button">Previous</button>
+        <button id="hideGuideForeverBtn" class="secondary-btn" type="button">Don't Show Again</button>
+        <button id="skipGuideBtn" class="secondary-btn" type="button">Skip</button>
+        <button id="nextGuideBtn" class="primary-btn" type="button">Next</button>
       </div>
     </div>
   </div>
@@ -297,6 +361,16 @@
           <span>To</span>
           <input type="date" id="reportToDate" />
         </label>
+      </div>
+      <div class="report-preview-section">
+        <div class="settings-list-header report-preview-header">
+          <div>
+            <h3>Preview</h3>
+            <p id="reportPreviewSummary" class="help-text">No rows selected yet.</p>
+          </div>
+          <button id="clearReportFiltersBtn" class="secondary-btn" type="button">Clear Filters</button>
+        </div>
+        <div id="reportPreviewContent" class="report-preview-list"></div>
       </div>
       <div class="report-actions">
         <button id="downloadReportBtn" class="primary-btn">Download CSV</button>
