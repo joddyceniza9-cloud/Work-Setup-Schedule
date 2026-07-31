@@ -921,7 +921,7 @@ function getDisplayWorkSetup(row, employee) {
 function getWorkSetupClass(row, employee) {
     const targetOutcome = getOutcomeForTargetRow(employee, row);
     if (targetOutcome?.outcome?.setup === "WFO") {
-        if (row.wfoWave === "Justified" || row.wfoWave === "Change Schedule") {
+        if (row.wfoWave === "Justified" || row.wfoWave === "Change Schedule" || row.wfoWave === "Use WFH Credit") {
             return "setup-badge wfo-waived";
         }
         return "setup-badge reflected-wfo";
@@ -938,6 +938,7 @@ function getWfoReasonTooltip(row, employee) {
         return "";
     }
     const reasons = targetOutcome.outcome.reasons || [];
+    const sourceDisplay = getDisplayDate(targetOutcome.sourceRow.dateValue);
     const labels = [];
     if (reasons.includes("Processing Time")) {
         labels.push("Did not Target processing time");
@@ -946,12 +947,18 @@ function getWfoReasonTooltip(row, employee) {
         labels.push("With Error");
     }
     if (reasons.includes("Unapproved Leave")) {
-        labels.push("SL or EL");
+        const leaveCode = `${targetOutcome.sourceRow.unapprovedLeave || ""}`.trim();
+        if (leaveCode === "SL" || leaveCode === "EL") {
+            labels.push(leaveCode);
+        } else {
+            labels.push("Unapproved Leave");
+        }
     }
     if (reasons.includes("Change Schedule")) {
         labels.push("Change Schedule");
     }
-    return labels.join(", ");
+    const reasonText = labels.join(", ") || "WFO";
+    return `${sourceDisplay.month} ${sourceDisplay.date} ${sourceDisplay.day}: ${reasonText}`;
 }
 
 function getPerformanceTriggeredWfoReasons(row) {
@@ -2618,7 +2625,7 @@ function renderSummary() {
     const content = document.getElementById("summaryContent");
     const rows = getAllRows().filter((row) => {
         const employee = state.employees.find((entry) => entry.id === row.employeeId);
-        const isWaivedByWave = row.wfoWave === "Justified" || row.wfoWave === "Change Schedule";
+        const isWaivedByWave = row.wfoWave === "Justified" || row.wfoWave === "Change Schedule" || row.wfoWave === "Use WFH Credit";
         return getDisplayWorkSetup(row, employee) === "WFO" && !isWaivedByWave;
     });
     content.innerHTML = "";
