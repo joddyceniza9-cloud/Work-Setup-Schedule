@@ -1,11 +1,109 @@
-﻿const STORAGE_KEY = "offline-work-setup-schedule-v4";
+const STORAGE_KEY = "offline-work-setup-schedule-v4";
 const BACKUP_KEY = `${STORAGE_KEY}-backup`;
 const AUTH_STORAGE_KEY = "offline-work-setup-auth-v1";
 const USER_STORAGE_PREFIX = "offline-work-setup-user-v1";
+const ADMIN_USER_ID = "admin-account";
+const ADMIN_DEFAULT_USERNAME = "Joddy Boy";
+const ADMIN_DEFAULT_PASSWORD = "Joddy Boy";
 const monthNames = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const GUIDE_STEPS = [
+    {
+        title: "Welcome to the Planner",
+        body: "This is your main workspace. Start here to manage schedules, review dates, and keep your account data organized.",
+        selector: ".topbar",
+        placement: "bottom",
+    },
+    {
+        title: "Filters",
+        body: "Use Year, Month, and Week filters to focus the schedule and summaries on the exact period you want to check.",
+        selector: ".topbar-controls",
+        placement: "bottom",
+    },
+    {
+        title: "Schedule Actions",
+        body: "Use Sequence to arrange dates and Add Schedule Row to create a new schedule entry for the active employee tab.",
+        selector: ".table-actions-right",
+        placement: "bottom",
+    },
+    {
+        title: "Employee Tabs",
+        body: "Switch between ALL and each employee tab to edit or review one person at a time.",
+        selector: "#tabs",
+        placement: "bottom",
+    },
+    {
+        title: "Navigation Menu",
+        body: "Open this menu to access WFO Summary, WFH Credits, Dashboard, Trash Bin, and Generate Report.",
+        selector: "#menuBtn",
+        placement: "bottom",
+        beforeEnter: () => closeGuideMenu(),
+    },
+    {
+        title: "WFO Summary",
+        body: "This view groups WFO dates per employee so you can quickly see ongoing and finished WFO schedules.",
+        selector: "#summaryContent",
+        placement: "top",
+        beforeEnter: () => {
+            closeGuideMenu();
+            setActiveView("summary");
+        },
+    },
+    {
+        title: "Dashboard",
+        body: "Use the dashboard to monitor WFH, WFO Pending, WFO Done, and flagged schedule patterns in one place.",
+        selector: "#dashboardContent",
+        placement: "top",
+        beforeEnter: () => setActiveView("dashboard"),
+    },
+    {
+        title: "Generate Report",
+        body: "Choose employees and a date range here, preview the rows, then download the CSV report when you are ready.",
+        selector: ".report-preview-section",
+        placement: "top",
+        beforeEnter: () => {
+            populateReportScope();
+            const reportModal = document.getElementById("reportModal");
+            if (reportModal) {
+                reportModal.classList.remove("hidden");
+                reportModal.setAttribute("aria-hidden", "false");
+            }
+        },
+    },
+    {
+        title: "Settings",
+        body: "Open Settings anytime to update your own account details, employee names, colors, and account-specific setup.",
+        selector: "#settingsBtn",
+        placement: "left",
+        beforeEnter: () => {
+            const reportModal = document.getElementById("reportModal");
+            if (reportModal) {
+                reportModal.classList.add("hidden");
+                reportModal.setAttribute("aria-hidden", "true");
+            }
+            setActiveView("schedule");
+            closeGuideMenu();
+        },
+    },
+];
 
 function createId() {
     return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function createAdminAccount(overrides = {}) {
+    const username = `${overrides.username || ADMIN_DEFAULT_USERNAME}`.trim() || ADMIN_DEFAULT_USERNAME;
+    const password = typeof overrides.password === "string" && overrides.password.trim()
+        ? overrides.password
+        : ADMIN_DEFAULT_PASSWORD;
+    return {
+        id: ADMIN_USER_ID,
+        username,
+        usernameKey: normalizeUsername(username),
+        password,
+        role: "admin",
+        guideDisabled: Boolean(overrides.guideDisabled),
+        ...overrides,
+    };
 }
 
 function createRow(dateValue, defaults = {}) {
@@ -20,6 +118,7 @@ function createRow(dateValue, defaults = {}) {
         changeScheduleMonth: "",
         changeScheduleDate: "",
         creditUsed: false,
+        wfoDone: false,
         notes: "",
         generatedByRowId: "",
         ...defaults,
@@ -31,6 +130,7 @@ function createDefaultState() {
         headerName: "Work Setup Schedule",
         targetProcessingTime: "",
         weeklyWfhCreditTarget: "",
+        lastUpdatedAt: "",
         selectedYear: 2026,
         selectedMonth: 8,
         selectedWeek: "all",
@@ -56,7 +156,7 @@ function createDefaultAuthState() {
     return {
         currentUserId: "",
         legacyMigrated: false,
-        users: [],
+        users: [createAdminAccount()],
     };
 }
 
@@ -88,6 +188,43 @@ function cloneState(value) {
 
 function normalizeUsername(value) {
     return `${value || ""}`.trim().toLowerCase();
+}
+
+function ensureAdminAccount(users) {
+    const normalizedUsers = Array.isArray(users) ? [...users] : [];
+    const adminIndex = normalizedUsers.findIndex((user) => user.id === ADMIN_USER_ID || user.role === "admin");
+
+    if (adminIndex >= 0) {
+        normalizedUsers[adminIndex] = createAdminAccount(normalizedUsers[adminIndex]);
+        return normalizedUsers;
+    }
+
+    normalizedUsers.unshift(createAdminAccount());
+    return normalizedUsers;
+}
+
+function isAdminUser(user) {
+    return Boolean(user && user.role === "admin");
+}
+
+function openGuideMenu() {
+    const sideNav = document.getElementById("sideNav");
+    const menuButton = document.getElementById("menuBtn");
+    if (!sideNav || !menuButton) {
+        return;
+    }
+    sideNav.classList.add("open");
+    menuButton.classList.add("open");
+}
+
+function closeGuideMenu() {
+    const sideNav = document.getElementById("sideNav");
+    const menuButton = document.getElementById("menuBtn");
+    if (!sideNav || !menuButton) {
+        return;
+    }
+    sideNav.classList.remove("open");
+    menuButton.classList.remove("open");
 }
 
 function getUserStorageKey(userId) {
@@ -195,14 +332,17 @@ function loadAuthState() {
 
 function normalizeAuthState(saved) {
     const fallback = createDefaultAuthState();
-    const users = Array.isArray(saved?.users)
+    const users = ensureAdminAccount(Array.isArray(saved?.users)
         ? saved.users.map((user) => ({
             id: user.id || createId(),
             username: `${user.username || ""}`.trim() || "User",
             usernameKey: normalizeUsername(user.usernameKey || user.username),
             password: typeof user.password === "string" ? user.password : "",
+            role: user.role === "admin" || user.id === ADMIN_USER_ID ? "admin" : "user",
+            guideDisabled: Boolean(user.guideDisabled),
+            updatedAt: typeof user.updatedAt === "string" ? user.updatedAt : "",
         })).filter((user) => user.usernameKey)
-        : [];
+        : fallback.users);
     const currentUserId = users.some((user) => user.id === saved?.currentUserId) ? saved.currentUserId : fallback.currentUserId;
 
     return {
@@ -214,6 +354,31 @@ function normalizeAuthState(saved) {
 
 function saveAuthState() {
     localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(auth));
+}
+
+function touchUserRecord(userId) {
+    const user = auth.users.find((entry) => entry.id === userId);
+    if (!user) {
+        return;
+    }
+    user.updatedAt = new Date().toISOString();
+}
+
+function formatTimestamp(value) {
+    if (!value) {
+        return "Not updated yet";
+    }
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) {
+        return "Not updated yet";
+    }
+    return date.toLocaleString("en-US", {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+    });
 }
 
 function getCurrentUser() {
@@ -243,15 +408,23 @@ let state = loadState();
 let activeTab = "all";
 let activeView = "schedule";
 let pendingDeleteAccountId = "";
+let guideStepIndex = -1;
 
 function loadState() {
     const currentUser = getCurrentUser();
     if (!currentUser) {
         return cloneState(createDefaultState());
     }
+    return loadStateForUserId(currentUser.id);
+}
+
+function loadStateForUserId(userId) {
+    if (!userId) {
+        return cloneState(createDefaultState());
+    }
     try {
-        const saved = localStorage.getItem(getUserStorageKey(currentUser.id));
-        const backup = localStorage.getItem(getUserBackupKey(currentUser.id));
+        const saved = localStorage.getItem(getUserStorageKey(userId));
+        const backup = localStorage.getItem(getUserBackupKey(userId));
         const source = saved || backup;
         if (!source) {
             return cloneState(createDefaultState());
@@ -286,6 +459,7 @@ function normalizeState(saved) {
                         changeScheduleMonth: normalizedChangeSchedule.changeScheduleMonth,
                         changeScheduleDate: normalizedChangeSchedule.changeScheduleDate,
                         creditUsed: Boolean(row.creditUsed),
+                        wfoDone: Boolean(row.wfoDone),
                         notes: row.notes || "",
                         generatedByRowId: typeof row.generatedByRowId === "string" ? row.generatedByRowId : "",
                     };
@@ -345,6 +519,7 @@ function normalizeState(saved) {
             : (saved.weeklyWfhCreditTarget === null || typeof saved.weeklyWfhCreditTarget === "undefined"
                 ? fallback.weeklyWfhCreditTarget
                 : String(saved.weeklyWfhCreditTarget)),
+        lastUpdatedAt: typeof saved.lastUpdatedAt === "string" ? saved.lastUpdatedAt : fallback.lastUpdatedAt,
         selectedYear: Math.max(2026, Number(saved.selectedYear) || fallback.selectedYear),
         selectedMonth: normalizedSelectedMonths[0] || fallback.selectedMonth,
         selectedWeek: normalizedSelectedWeeks[0] || fallback.selectedWeek,
@@ -381,7 +556,7 @@ function requireLoggedInUser() {
     if (getCurrentUser()) {
         return true;
     }
-    openSettings({ focusAuth: true });
+    openAuthModal();
     setAuthFeedback("Log in first to manage the schedule.", "error");
     return false;
 }
@@ -508,6 +683,9 @@ function saveState() {
     if (!currentUser) {
         return;
     }
+    state.lastUpdatedAt = new Date().toISOString();
+    touchUserRecord(currentUser.id);
+    saveAuthState();
     const serialized = JSON.stringify(state);
     localStorage.setItem(getUserStorageKey(currentUser.id), serialized);
     localStorage.setItem(getUserBackupKey(currentUser.id), serialized);
@@ -743,6 +921,36 @@ function hasSetupInput(row) {
     );
 }
 
+function isTrackedWfoRow(row, employee) {
+    return getDisplayWorkSetup(row, employee) === "WFO";
+}
+
+function syncEmployeeWfoDoneFlags(employee) {
+    employee.rows.forEach((entry) => {
+        if (!isTrackedWfoRow(entry, employee)) {
+            entry.wfoDone = false;
+        }
+    });
+}
+
+function setRowWfoDone(employeeId, rowId, done) {
+    const employee = state.employees.find((entry) => entry.id === employeeId);
+    if (!employee) {
+        return;
+    }
+    const row = employee.rows.find((entry) => entry.id === rowId);
+    if (!row || !isTrackedWfoRow(row, employee)) {
+        return;
+    }
+    row.wfoDone = Boolean(done);
+    saveState();
+    render();
+}
+
+function getWfoStatusLabel(row) {
+    return row.wfoDone ? "Done" : "Ongoing";
+}
+
 function getEmployeeCreditBalance(employee) {
     const weeklyCounts = {};
     const weeklyTarget = getWeeklyCreditTargetNumber();
@@ -909,6 +1117,7 @@ function updateRow(employeeId, rowId, field, value) {
     }
 
     ensureProjectedResultRow(employee, row);
+    syncEmployeeWfoDoneFlags(employee);
 
     saveState();
     render();
@@ -939,8 +1148,28 @@ function updateDateRow(employeeId, rowId, monthText, dayText) {
     row.dateValue = nextDateValue;
     ensureDateSequence(employee);
     ensureProjectedResultRow(employee, row);
+    syncEmployeeWfoDoneFlags(employee);
     saveState();
     render();
+}
+
+function clearChangeScheduleSelection(employee, row, options = {}) {
+    if (!options.keepMonth) {
+        row.changeScheduleMonth = "";
+    }
+    row.changeScheduleDate = "";
+    clearProjectedResultFromSource(employee, row.id);
+}
+
+function isDateTaggedAsWfo(employee, sourceRowId, targetDateValue) {
+    const targetRow = employee.rows.find((entry) => entry.id !== sourceRowId && entry.dateValue === targetDateValue);
+    if (!targetRow) {
+        return false;
+    }
+    if (getDisplayWorkSetup(targetRow, employee) === "WFO") {
+        return true;
+    }
+    return targetRow.wfoWave === "Change Schedule" || targetRow.workSetup === "WFO";
 }
 
 function applyChangeScheduleUpdate(employeeId, rowId, monthText, dayText) {
@@ -962,12 +1191,16 @@ function applyChangeScheduleUpdate(employeeId, rowId, monthText, dayText) {
     row.changeScheduleDate = dayText;
     if (monthText && dayText) {
         const targetDateValue = buildDateValue(Number(state.selectedYear), monthIndex, dayText);
+        if (isDateTaggedAsWfo(employee, row.id, targetDateValue)) {
+            clearChangeScheduleSelection(employee, row, { keepMonth: true });
+            syncEmployeeWfoDoneFlags(employee);
+            saveState();
+            render();
+            window.alert("This date is already tagged as WFO");
+            return;
+        }
         const existingTargetRow = employee.rows.find((entry) => entry.id !== row.id && entry.dateValue === targetDateValue);
         if (existingTargetRow) {
-            if (existingTargetRow.wfoWave === "Change Schedule" || existingTargetRow.workSetup === "WFO") {
-                window.alert("This date is already tagged as WFO");
-                return;
-            }
             existingTargetRow.wfoWave = "";
             existingTargetRow.workSetup = "";
             existingTargetRow.changeScheduleMonth = "";
@@ -997,6 +1230,7 @@ function applyChangeScheduleUpdate(employeeId, rowId, monthText, dayText) {
 
     ensureDateSequence(employee);
     ensureProjectedResultRow(employee, row);
+    syncEmployeeWfoDoneFlags(employee);
     saveState();
     render();
 }
@@ -1080,13 +1314,37 @@ function addRow() {
 function renderHeader() {
     document.getElementById("headerTitle").textContent = state.headerName;
     const currentUser = getCurrentUser();
+    const authShortcutButton = document.getElementById("authShortcutBtn");
     document.getElementById("headerMeta").textContent = currentUser
         ? `Signed in as ${currentUser.username}`
         : "No user logged in";
     document.getElementById("currentUserPill").textContent = currentUser
         ? `User: ${currentUser.username}`
         : "User: none";
-    document.getElementById("authShortcutBtn").textContent = currentUser ? "Log Out" : "Log In";
+    authShortcutButton.textContent = currentUser ? "Logged In" : "Log In";
+    authShortcutButton.disabled = Boolean(currentUser);
+}
+
+function openAuthModal() {
+    const modal = document.getElementById("authModal");
+    if (!modal) {
+        return;
+    }
+    modal.classList.remove("hidden");
+    modal.setAttribute("aria-hidden", "false");
+    const usernameInput = document.getElementById("authUsernameInput");
+    if (usernameInput) {
+        usernameInput.focus();
+    }
+}
+
+function closeAuthModal() {
+    const modal = document.getElementById("authModal");
+    if (!modal) {
+        return;
+    }
+    modal.classList.add("hidden");
+    modal.setAttribute("aria-hidden", "true");
 }
 
 function setAuthFeedback(message, tone = "info") {
@@ -1158,6 +1416,11 @@ function deleteAccount(userId) {
     if (!user) {
         return;
     }
+    const isCurrentUser = auth.currentUserId === user.id;
+    if (isAdminUser(user)) {
+        setDeleteAccountFeedback("Admin account cannot be deleted.", "error");
+        return;
+    }
 
     const deletePassword = document.getElementById("deleteAccountPasswordInput").value;
     if (deletePassword !== user.password) {
@@ -1169,7 +1432,7 @@ function deleteAccount(userId) {
     localStorage.removeItem(getUserBackupKey(user.id));
     auth.users = auth.users.filter((entry) => entry.id !== user.id);
 
-    if (auth.currentUserId === user.id) {
+    if (isCurrentUser) {
         auth.currentUserId = "";
         state = cloneState(createDefaultState());
         activeTab = "all";
@@ -1179,10 +1442,12 @@ function deleteAccount(userId) {
 
     saveAuthState();
     closeDeleteAccountModal();
-    renderAuthUserList();
     clearAuthInputs();
     setAuthFeedback(`Account ${user.username} deleted.`, "success");
     render();
+    if (isCurrentUser) {
+        openAuthModal();
+    }
 }
 
 function confirmDeleteAccount() {
@@ -1192,14 +1457,23 @@ function confirmDeleteAccount() {
     deleteAccount(pendingDeleteAccountId);
 }
 
-function renderAuthUserList() {
-    const list = document.getElementById("authUserList");
-    if (!list) {
+function renderAdminAccountList() {
+    const panel = document.getElementById("adminPanel");
+    const list = document.getElementById("adminAccountList");
+    const searchInput = document.getElementById("adminAccountSearchInput");
+    if (!panel || !list) {
         return;
     }
 
-    list.innerHTML = "";
     const currentUser = getCurrentUser();
+    const showAdminPanel = isAdminUser(currentUser);
+    panel.hidden = !showAdminPanel;
+    panel.classList.toggle("hidden", !showAdminPanel);
+    list.innerHTML = "";
+    if (!showAdminPanel) {
+        return;
+    }
+
     if (!auth.users.length) {
         const empty = document.createElement("p");
         empty.className = "help-text";
@@ -1208,42 +1482,402 @@ function renderAuthUserList() {
         return;
     }
 
-    auth.users.forEach((user) => {
+    const accountStats = auth.users.map((user) => {
+        const userState = loadStateForUserId(user.id);
+        return {
+            user,
+            userState,
+            employeeCount: userState.employees.length,
+            rowCount: userState.employees.reduce((sum, employee) => sum + employee.rows.length, 0),
+        };
+    });
+    const highestEmployeeCount = Math.max(...accountStats.map((entry) => entry.employeeCount), 0);
+    const highestRowCount = Math.max(...accountStats.map((entry) => entry.rowCount), 0);
+
+    const searchTerm = `${searchInput?.value || ""}`.trim().toLowerCase();
+    const visibleUsers = accountStats.filter(({ user, userState }) => {
+        if (!searchTerm) {
+            return true;
+        }
+        const haystack = [
+            user.username,
+            user.role,
+            userState.headerName,
+            userState.targetProcessingTime,
+            userState.weeklyWfhCreditTarget,
+        ].join(" ").toLowerCase();
+        return haystack.includes(searchTerm);
+    });
+
+    if (!visibleUsers.length) {
+        const empty = document.createElement("p");
+        empty.className = "help-text";
+        empty.textContent = "No accounts matched your search.";
+        list.appendChild(empty);
+        return;
+    }
+
+    visibleUsers.forEach(({ user, userState, employeeCount, rowCount }) => {
         const row = document.createElement("div");
-        row.className = "account-row";
+        const isTopEmployees = employeeCount > 0 && employeeCount === highestEmployeeCount;
+        const isTopRows = rowCount > 0 && rowCount === highestRowCount;
+        row.className = `account-row admin-account-row${isTopEmployees || isTopRows ? " admin-account-row-highlight" : ""}`;
 
         const info = document.createElement("div");
         info.className = "account-info";
 
+        const topLine = document.createElement("div");
+        topLine.className = "admin-account-topline";
+
         const name = document.createElement("strong");
         name.textContent = user.username;
 
+        const role = document.createElement("span");
+        role.className = `role-chip ${user.role === "admin" ? "admin" : "user"}`;
+        role.textContent = user.role === "admin" ? "Administrator" : "Standard User";
+
+        const spotlight = document.createElement("div");
+        spotlight.className = "admin-spotlight-tags";
+        if (isTopEmployees) {
+            const badge = document.createElement("span");
+            badge.className = "role-chip spotlight";
+            badge.textContent = "Most Employees";
+            spotlight.appendChild(badge);
+        }
+        if (isTopRows) {
+            const badge = document.createElement("span");
+            badge.className = "role-chip spotlight";
+            badge.textContent = "Most Rows";
+            spotlight.appendChild(badge);
+        }
+
         const detail = document.createElement("span");
-        detail.textContent = currentUser?.id === user.id ? "Currently active" : "Saved locally";
+        detail.textContent = currentUser?.id === user.id ? "Currently active on this browser" : "Stored locally on this browser";
 
-        const deleteButton = document.createElement("button");
-        deleteButton.type = "button";
-        deleteButton.className = "danger-btn";
-        deleteButton.textContent = "Delete Account";
-        deleteButton.addEventListener("click", () => openDeleteAccountModal(user.id));
+        const updatedAt = document.createElement("span");
+        updatedAt.className = "admin-updated-at";
+        updatedAt.textContent = `Last updated: ${formatTimestamp(user.updatedAt || userState.lastUpdatedAt)}`;
 
-        info.appendChild(name);
+        const metaGrid = document.createElement("div");
+        metaGrid.className = "admin-meta-grid";
+
+        [
+            { label: "Password", value: user.password || "(empty)" },
+            { label: "Header Name", value: userState.headerName || "Work Setup Schedule" },
+            { label: "Target Time", value: userState.targetProcessingTime || "Not set" },
+            { label: "WFH Credits/Week", value: userState.weeklyWfhCreditTarget || "Not set" },
+            { label: "Employees", value: String(employeeCount) },
+            { label: "Schedule Rows", value: String(rowCount) },
+        ].forEach((entry) => {
+            const item = document.createElement("div");
+            item.className = "admin-meta-item";
+            const label = document.createElement("span");
+            label.className = "admin-meta-label";
+            label.textContent = entry.label;
+            const value = document.createElement("strong");
+            value.className = "admin-meta-value";
+            value.textContent = entry.value;
+            item.appendChild(label);
+            item.appendChild(value);
+            metaGrid.appendChild(item);
+        });
+
+        const topLineRight = document.createElement("div");
+        topLineRight.className = "admin-topline-right";
+        topLineRight.appendChild(role);
+        if (spotlight.childNodes.length) {
+            topLineRight.appendChild(spotlight);
+        }
+
+        topLine.appendChild(name);
+        topLine.appendChild(topLineRight);
+        info.appendChild(topLine);
         info.appendChild(detail);
+        info.appendChild(updatedAt);
+        info.appendChild(metaGrid);
         row.appendChild(info);
-        row.appendChild(deleteButton);
         list.appendChild(row);
     });
+}
+
+function clearAdminSearch() {
+    const searchInput = document.getElementById("adminAccountSearchInput");
+    if (!searchInput) {
+        return;
+    }
+    searchInput.value = "";
+    renderAdminAccountList();
+}
+
+function clearGuideHighlights() {
+    document.querySelectorAll(".guide-highlight").forEach((element) => {
+        element.classList.remove("guide-highlight");
+    });
+}
+
+function resetGuideSpotlight() {
+    const spotlight = document.getElementById("guideSpotlight");
+    if (!spotlight) {
+        return;
+    }
+    spotlight.style.removeProperty("top");
+    spotlight.style.removeProperty("left");
+    spotlight.style.removeProperty("width");
+    spotlight.style.removeProperty("height");
+    spotlight.style.removeProperty("border-radius");
+    spotlight.classList.remove("active");
+}
+
+function updateGuideDots() {
+    const dots = document.getElementById("guideDots");
+    if (!dots) {
+        return;
+    }
+    dots.innerHTML = "";
+    GUIDE_STEPS.forEach((_, index) => {
+        const dot = document.createElement("span");
+        dot.className = `guide-dot${index === guideStepIndex ? " active" : ""}`;
+        dots.appendChild(dot);
+    });
+}
+
+function positionGuideSpotlight(target) {
+    const spotlight = document.getElementById("guideSpotlight");
+    if (!spotlight || !target) {
+        resetGuideSpotlight();
+        return;
+    }
+
+    const rect = target.getBoundingClientRect();
+    const styles = window.getComputedStyle(target);
+    const radius = styles.borderRadius || "16px";
+
+    spotlight.style.top = `${Math.max(8, rect.top - 8)}px`;
+    spotlight.style.left = `${Math.max(8, rect.left - 8)}px`;
+    spotlight.style.width = `${Math.max(24, rect.width + 16)}px`;
+    spotlight.style.height = `${Math.max(24, rect.height + 16)}px`;
+    spotlight.style.borderRadius = radius;
+    spotlight.classList.add("active");
+}
+
+function positionGuideCard(target, step = null) {
+    const guideCard = document.querySelector("#guideModal .guide-card");
+    if (!guideCard) {
+        return;
+    }
+
+    if (!target) {
+        guideCard.style.removeProperty("top");
+        guideCard.style.removeProperty("left");
+        guideCard.style.removeProperty("right");
+        guideCard.style.removeProperty("bottom");
+        guideCard.dataset.placement = "center";
+        return;
+    }
+
+    const rect = target.getBoundingClientRect();
+    const viewportWidth = window.innerWidth;
+    const viewportHeight = window.innerHeight;
+    const margin = 20;
+    const cardWidth = Math.min(380, viewportWidth - (margin * 2));
+    const cardHeight = 260;
+    const spaces = {
+        bottom: viewportHeight - rect.bottom,
+        top: rect.top,
+        right: viewportWidth - rect.right,
+        left: rect.left,
+    };
+
+    let placement = step?.placement || "bottom";
+    const canUsePlacement = {
+        bottom: spaces.bottom >= cardHeight + 28,
+        top: spaces.top >= cardHeight + 28,
+        right: spaces.right >= cardWidth + 28,
+        left: spaces.left >= cardWidth + 28,
+    };
+
+    if (!canUsePlacement[placement]) {
+        placement = "bottom";
+    }
+
+    if (placement === "bottom" && spaces.bottom >= cardHeight + 28) {
+        placement = "bottom";
+    } else if (spaces.top >= cardHeight + 28) {
+        placement = "top";
+    } else if (spaces.right >= cardWidth + 28) {
+        placement = "right";
+    } else if (spaces.left >= cardWidth + 28) {
+        placement = "left";
+    }
+
+    let top = margin;
+    let left = margin;
+
+    if (placement === "bottom") {
+        top = rect.bottom + 18;
+        left = rect.left + (rect.width / 2) - (cardWidth / 2);
+    } else if (placement === "top") {
+        top = rect.top - cardHeight - 18;
+        left = rect.left + (rect.width / 2) - (cardWidth / 2);
+    } else if (placement === "right") {
+        top = rect.top + (rect.height / 2) - (cardHeight / 2);
+        left = rect.right + 18;
+    } else if (placement === "left") {
+        top = rect.top + (rect.height / 2) - (cardHeight / 2);
+        left = rect.left - cardWidth - 18;
+    }
+
+    top = Math.max(margin, Math.min(top, viewportHeight - cardHeight - margin));
+    left = Math.max(margin, Math.min(left, viewportWidth - cardWidth - margin));
+
+    guideCard.dataset.placement = placement;
+    guideCard.style.width = `${cardWidth}px`;
+    guideCard.style.top = `${top}px`;
+    guideCard.style.left = `${left}px`;
+}
+
+function refreshActiveGuidePosition() {
+    if (guideStepIndex < 0 || guideStepIndex >= GUIDE_STEPS.length) {
+        return;
+    }
+    const step = GUIDE_STEPS[guideStepIndex];
+    const target = step?.selector ? document.querySelector(step.selector) : null;
+    positionGuideSpotlight(target || null);
+    positionGuideCard(target || null, step);
+}
+
+function closeGuide() {
+    const modal = document.getElementById("guideModal");
+    const guideCard = document.querySelector("#guideModal .guide-card");
+    const reportModal = document.getElementById("reportModal");
+    if (!modal) {
+        return;
+    }
+    guideStepIndex = -1;
+    clearGuideHighlights();
+    resetGuideSpotlight();
+    closeGuideMenu();
+    if (reportModal) {
+        reportModal.classList.add("hidden");
+        reportModal.setAttribute("aria-hidden", "true");
+    }
+    setActiveView("schedule");
+    if (guideCard) {
+        guideCard.style.removeProperty("top");
+        guideCard.style.removeProperty("left");
+        guideCard.style.removeProperty("width");
+        guideCard.dataset.placement = "center";
+    }
+    modal.classList.add("hidden");
+    modal.setAttribute("aria-hidden", "true");
+}
+
+function renderGuideStep() {
+    const modal = document.getElementById("guideModal");
+    const title = document.getElementById("guideTitle");
+    const body = document.getElementById("guideBody");
+    const stepMeta = document.getElementById("guideStepMeta");
+    const previousButton = document.getElementById("previousGuideBtn");
+    const nextButton = document.getElementById("nextGuideBtn");
+    const step = GUIDE_STEPS[guideStepIndex];
+
+    if (!modal || !title || !body || !stepMeta || !previousButton || !nextButton || !step) {
+        closeGuide();
+        return;
+    }
+
+    clearGuideHighlights();
+    updateGuideDots();
+    if (typeof step.beforeEnter === "function") {
+        step.beforeEnter();
+    }
+
+    if (step.selector) {
+        const target = document.querySelector(step.selector);
+        if (target) {
+            target.classList.add("guide-highlight");
+            target.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "smooth" });
+            positionGuideSpotlight(target);
+            positionGuideCard(target, step);
+        } else {
+            resetGuideSpotlight();
+            positionGuideCard(null);
+        }
+    } else {
+        resetGuideSpotlight();
+        positionGuideCard(null);
+    }
+
+    title.textContent = step.title;
+    body.textContent = step.body;
+    stepMeta.textContent = `Step ${guideStepIndex + 1} of ${GUIDE_STEPS.length}`;
+    previousButton.disabled = guideStepIndex === 0;
+    nextButton.textContent = guideStepIndex === GUIDE_STEPS.length - 1 ? "Finish" : "Next";
+    modal.classList.remove("hidden");
+    modal.setAttribute("aria-hidden", "false");
+}
+
+function previousGuideStep() {
+    if (guideStepIndex <= 0) {
+        renderGuideStep();
+        return;
+    }
+    guideStepIndex -= 1;
+    renderGuideStep();
+}
+
+function nextGuideStep() {
+    if (guideStepIndex >= GUIDE_STEPS.length - 1) {
+        closeGuide();
+        return;
+    }
+    guideStepIndex += 1;
+    renderGuideStep();
+}
+
+function startGuideTour(forceOpen = false) {
+    const currentUser = getCurrentUser();
+    if (!forceOpen && currentUser?.guideDisabled) {
+        return;
+    }
+    guideStepIndex = -1;
+    nextGuideStep();
+}
+
+function reopenQuickGuide() {
+    if (!getCurrentUser()) {
+        return;
+    }
+    closeSettings();
+    startGuideTour(true);
+}
+
+function disableGuideForCurrentUser() {
+    const currentUser = getCurrentUser();
+    if (!currentUser) {
+        closeGuide();
+        return;
+    }
+    currentUser.guideDisabled = true;
+    touchUserRecord(currentUser.id);
+    saveAuthState();
+    closeGuide();
 }
 
 function syncAuthUI() {
     const currentUser = getCurrentUser();
     const gate = document.getElementById("authGate");
+    const authModal = document.getElementById("authModal");
     const appShell = document.getElementById("appShell");
     const currentUserText = document.getElementById("currentUserText");
+    const authModalCurrentUserText = document.getElementById("authModalCurrentUserText");
     const logOutButton = document.getElementById("logOutBtn");
+    const deleteCurrentAccountButton = document.getElementById("deleteCurrentAccountBtn");
 
     gate.classList.toggle("hidden", Boolean(currentUser));
     gate.setAttribute("aria-hidden", currentUser ? "true" : "false");
+    authModal.classList.toggle("hidden", Boolean(currentUser));
+    authModal.setAttribute("aria-hidden", currentUser ? "true" : "false");
     appShell.classList.toggle("auth-disabled", !currentUser);
 
     if (currentUserText) {
@@ -1251,8 +1885,16 @@ function syncAuthUI() {
             ? `Active user: ${currentUser.username}`
             : "No user is logged in. Sign up or log in to load a user-specific schedule.";
     }
+    if (authModalCurrentUserText) {
+        authModalCurrentUserText.textContent = currentUser
+            ? `Active user: ${currentUser.username}`
+            : "No user is logged in.";
+    }
     if (logOutButton) {
         logOutButton.disabled = !currentUser;
+    }
+    if (deleteCurrentAccountButton) {
+        deleteCurrentAccountButton.disabled = !currentUser || isAdminUser(currentUser);
     }
 }
 
@@ -1285,12 +1927,16 @@ function signUpUser() {
         return;
     }
 
-    const shouldImportLegacyState = Boolean(pendingMigrationState) && !auth.legacyMigrated && auth.users.length === 0;
+    const registeredNonAdminUsers = auth.users.filter((user) => !isAdminUser(user)).length;
+    const shouldImportLegacyState = Boolean(pendingMigrationState) && !auth.legacyMigrated && registeredNonAdminUsers === 0;
     const newUser = {
         id: createId(),
         username,
         usernameKey: normalizeUsername(username),
         password,
+        role: "user",
+        guideDisabled: false,
+        updatedAt: new Date().toISOString(),
     };
 
     auth.users.push(newUser);
@@ -1310,9 +1956,10 @@ function signUpUser() {
     saveState();
     clearAuthInputs();
     setAuthFeedback("Account created successfully.", "success");
-    closeSettings();
+    closeAuthModal();
     setActiveView("schedule");
     render();
+    startGuideTour();
 }
 
 function logInUser() {
@@ -1327,7 +1974,7 @@ function logInUser() {
 
     clearAuthInputs();
     setAuthFeedback("Login successful.", "success");
-    closeSettings();
+    closeAuthModal();
     applyLogin(user);
 }
 
@@ -1343,7 +1990,49 @@ function logOutUser() {
     activeView = "schedule";
     setActiveView(activeView);
     closeSettings();
+    openAuthModal();
     render();
+}
+
+function updateCurrentAccount() {
+    const currentUser = getCurrentUser();
+    if (!currentUser) {
+        return;
+    }
+
+    const usernameInput = document.getElementById("accountUsernameInput");
+    const passwordInput = document.getElementById("accountPasswordInput");
+    const feedback = document.getElementById("accountFeedback");
+    const nextUsername = usernameInput.value.trim();
+    const nextPassword = passwordInput.value.trim();
+
+    if (nextUsername.length < 3) {
+        feedback.textContent = "Username must be at least 3 characters.";
+        feedback.dataset.tone = "error";
+        return;
+    }
+    if (nextPassword.length < 4) {
+        feedback.textContent = "Password must be at least 4 characters.";
+        feedback.dataset.tone = "error";
+        return;
+    }
+
+    const duplicateUser = auth.users.find((user) => user.id !== currentUser.id && user.usernameKey === normalizeUsername(nextUsername));
+    if (duplicateUser) {
+        feedback.textContent = "That username already exists.";
+        feedback.dataset.tone = "error";
+        return;
+    }
+
+    currentUser.username = nextUsername;
+    currentUser.usernameKey = normalizeUsername(nextUsername);
+    currentUser.password = nextPassword;
+    touchUserRecord(currentUser.id);
+    saveAuthState();
+    feedback.textContent = "Account credentials updated.";
+    feedback.dataset.tone = "success";
+    render();
+    openSettings();
 }
 
 function sequenceDatesForEmployee(employee) {
@@ -1590,7 +2279,7 @@ function renderTable() {
         const workSetupCell = document.createElement("td");
         const workSetupBadge = document.createElement("span");
         workSetupBadge.className = getWorkSetupClass(row, employee);
-        workSetupBadge.textContent = displaySetup;
+        workSetupBadge.textContent = displaySetup === "WFO" ? `WFO ${getWfoStatusLabel(row)}` : displaySetup;
         workSetupCell.appendChild(workSetupBadge);
         tr.appendChild(workSetupCell);
 
@@ -1670,6 +2359,15 @@ function renderTable() {
             });
             actionsCell.appendChild(creditButton);
         }
+        if (displaySetup === "WFO") {
+            const doneButton = document.createElement("button");
+            doneButton.className = `secondary-btn mini-btn ${row.wfoDone ? "is-done" : ""}`;
+            doneButton.textContent = row.wfoDone ? "Undo" : "Done";
+            doneButton.addEventListener("click", () => {
+                setRowWfoDone(row.employeeId, row.id, !row.wfoDone);
+            });
+            actionsCell.appendChild(doneButton);
+        }
         const deleteButton = document.createElement("button");
         deleteButton.className = "icon-btn row-delete-btn";
         deleteButton.textContent = "🗑";
@@ -1686,16 +2384,20 @@ function renderTable() {
 }
 
 function buildOverviewSeries(rows) {
+    const trackedRows = rows.map((row) => {
+        const employee = state.employees.find((entry) => entry.id === row.employeeId);
+        return {
+            ...row,
+            displaySetup: getDisplayWorkSetup(row, employee),
+        };
+    });
     return [
         { label: "Off Target", value: hasTargetProcessingTime() ? rows.filter((row) => parseDurationToSeconds(row.processingTime) > parseDurationToSeconds(state.targetProcessingTime)).length : 0, color: "#dc2626" },
         { label: "With Error", value: rows.filter((row) => row.accuracy === "With Error").length, color: "#f59e0b" },
         { label: "Unapproved Leave", value: rows.filter((row) => ["SL", "EL"].includes((row.unapprovedLeave || "").trim())).length, color: "#ef4444" },
-        {
-            label: "WFO", value: rows.filter((row) => {
-                const employee = state.employees.find((entry) => entry.id === row.employeeId);
-                return getDisplayWorkSetup(row, employee) === "WFO";
-            }).length, color: "#2563eb"
-        },
+        { label: "WFH", value: trackedRows.filter((row) => row.displaySetup === "WFH").length, color: "#14b8a6" },
+        { label: "WFO Pending", value: trackedRows.filter((row) => row.displaySetup === "WFO" && !row.wfoDone).length, color: "#2563eb" },
+        { label: "WFO Done", value: trackedRows.filter((row) => row.displaySetup === "WFO" && row.wfoDone).length, color: "#16a34a" },
     ];
 }
 
@@ -1764,16 +2466,32 @@ function renderSummary() {
         const title = document.createElement("h3");
         title.textContent = employeeName;
         card.appendChild(title);
-        const list = document.createElement("ul");
-        employeeRows.forEach((row) => {
-            const item = document.createElement("li");
-            const employee = state.employees.find((entry) => entry.id === row.employeeId);
-            const dateText = `${getDisplayDate(row.dateValue).month} ${getDisplayDate(row.dateValue).date}`;
-            const reasons = getOutcomeForTargetRow(employee, row)?.outcome?.reasons || [];
-            item.textContent = `${dateText} — ${reasons.join(", ") || "WFO"}`;
-            list.appendChild(item);
+        const pendingRows = employeeRows.filter((row) => !row.wfoDone);
+        const doneRows = employeeRows.filter((row) => row.wfoDone);
+        [
+            { label: "Ongoing WFO", rows: pendingRows },
+            { label: "Finished WFO", rows: doneRows },
+        ].forEach((sectionData) => {
+            if (!sectionData.rows.length) {
+                return;
+            }
+            const section = document.createElement("div");
+            section.className = "summary-section";
+            const heading = document.createElement("h4");
+            heading.textContent = sectionData.label;
+            section.appendChild(heading);
+            const list = document.createElement("ul");
+            sectionData.rows.forEach((row) => {
+                const item = document.createElement("li");
+                const employee = state.employees.find((entry) => entry.id === row.employeeId);
+                const dateText = `${getDisplayDate(row.dateValue).month} ${getDisplayDate(row.dateValue).date} ${getDisplayDate(row.dateValue).day}`;
+                const reasons = getOutcomeForTargetRow(employee, row)?.outcome?.reasons || [];
+                item.textContent = `${dateText} — ${getWfoStatusLabel(row)} — ${reasons.join(", ") || "WFO"}`;
+                list.appendChild(item);
+            });
+            section.appendChild(list);
+            card.appendChild(section);
         });
-        card.appendChild(list);
         fragment.appendChild(card);
     });
     content.appendChild(fragment);
@@ -1801,11 +2519,15 @@ function renderCredits() {
 function renderDashboard() {
     const content = document.getElementById("dashboardContent");
     const rows = getAllRows();
-    const flaggedRows = rows.filter((row) => {
+    const trackedRows = rows.filter((row) => {
+        const employee = state.employees.find((entry) => entry.id === row.employeeId);
+        return ["WFO", "WFH"].includes(getDisplayWorkSetup(row, employee));
+    });
+    const wfoRows = trackedRows.filter((row) => {
         const employee = state.employees.find((entry) => entry.id === row.employeeId);
         return getDisplayWorkSetup(row, employee) === "WFO";
     });
-    const series = state.dashboardChartScope === "contributors" ? buildContributorSeries(flaggedRows) : buildOverviewSeries(rows);
+    const series = state.dashboardChartScope === "contributors" ? buildContributorSeries(wfoRows) : buildOverviewSeries(rows);
     const chartStyle = state.dashboardChartStyle || "pie";
     content.innerHTML = "";
 
@@ -1816,20 +2538,48 @@ function renderDashboard() {
     card.innerHTML = `<h3>${state.dashboardChartScope === "contributors" ? "Employee Contributors" : "Flagged Overview"}</h3>${createChartMarkup(series, chartStyle)}${createLegendMarkup(series)}`;
     cards.appendChild(card);
 
+    const statusCard = document.createElement("div");
+    statusCard.className = "dashboard-card";
+    const pendingCount = wfoRows.filter((row) => !row.wfoDone).length;
+    const doneCount = wfoRows.filter((row) => row.wfoDone).length;
+    const wfhCount = trackedRows.filter((row) => {
+        const employee = state.employees.find((entry) => entry.id === row.employeeId);
+        return getDisplayWorkSetup(row, employee) === "WFH";
+    }).length;
+    statusCard.innerHTML = `<h3>Work Setup Status</h3><div class="dashboard-status-grid"><div class="metric-tile"><strong>${wfhCount}</strong><span>WFH</span></div><div class="metric-tile"><strong>${pendingCount}</strong><span>WFO Pending</span></div><div class="metric-tile"><strong>${doneCount}</strong><span>WFO Done</span></div></div>`;
+    cards.appendChild(statusCard);
+
     const detailCard = document.createElement("div");
     detailCard.className = "dashboard-card";
     const detailTitle = document.createElement("h3");
-    detailTitle.textContent = "Flagged Entries";
+    detailTitle.textContent = "WFO Tracking";
     detailCard.appendChild(detailTitle);
-    const list = document.createElement("ul");
-    flaggedRows.forEach((row) => {
-        const item = document.createElement("li");
-        const employee = state.employees.find((entry) => entry.id === row.employeeId);
-        const reasons = getOutcomeForTargetRow(employee, row)?.outcome?.reasons || [];
-        item.textContent = `${row.employeeName} — ${getDisplayDate(row.dateValue).month} ${getDisplayDate(row.dateValue).date}: ${reasons.join(", ") || "WFO"}`;
-        list.appendChild(item);
+    [
+        { title: "Pending WFO", rows: wfoRows.filter((row) => !row.wfoDone) },
+        { title: "Finished WFO", rows: wfoRows.filter((row) => row.wfoDone) },
+    ].forEach((sectionData) => {
+        const section = document.createElement("div");
+        section.className = "summary-section";
+        const heading = document.createElement("h4");
+        heading.textContent = sectionData.title;
+        section.appendChild(heading);
+        const list = document.createElement("ul");
+        if (!sectionData.rows.length) {
+            const item = document.createElement("li");
+            item.textContent = "No entries.";
+            list.appendChild(item);
+        } else {
+            sectionData.rows.forEach((row) => {
+                const item = document.createElement("li");
+                const employee = state.employees.find((entry) => entry.id === row.employeeId);
+                const reasons = getOutcomeForTargetRow(employee, row)?.outcome?.reasons || [];
+                item.textContent = `${row.employeeName} — ${getDisplayDate(row.dateValue).month} ${getDisplayDate(row.dateValue).date}: ${reasons.join(", ") || "WFO"}`;
+                list.appendChild(item);
+            });
+        }
+        section.appendChild(list);
+        detailCard.appendChild(section);
     });
-    detailCard.appendChild(list);
     cards.appendChild(detailCard);
     content.appendChild(cards);
 }
@@ -1915,6 +2665,11 @@ function setActiveView(view) {
 }
 
 function openSettings(options = {}) {
+    if (!getCurrentUser()) {
+        openAuthModal();
+        setAuthFeedback("Log in first to open settings.", "error");
+        return;
+    }
     const modal = document.getElementById("settingsModal");
     const headerInput = document.getElementById("headerNameInput");
     const targetInput = document.getElementById("targetProcessingTimeInput");
@@ -1924,6 +2679,11 @@ function openSettings(options = {}) {
     const surfaceInput = document.getElementById("surfaceColorInput");
     const textInput = document.getElementById("textColorInput");
     const employeeList = document.getElementById("employeeSettingsList");
+    const accountUsernameInput = document.getElementById("accountUsernameInput");
+    const accountPasswordInput = document.getElementById("accountPasswordInput");
+    const accountFeedback = document.getElementById("accountFeedback");
+    const adminPanel = document.getElementById("adminPanel");
+    const currentUser = getCurrentUser();
 
     headerInput.value = state.headerName;
     targetInput.value = typeof state.targetProcessingTime === "string" ? state.targetProcessingTime : "";
@@ -1932,9 +2692,17 @@ function openSettings(options = {}) {
     backgroundInput.value = state.theme.background;
     surfaceInput.value = state.theme.surface;
     textInput.value = state.theme.text;
+    accountUsernameInput.value = currentUser?.username || "";
+    accountPasswordInput.value = currentUser?.password || "";
+    accountFeedback.textContent = "";
+    delete accountFeedback.dataset.tone;
+    if (adminPanel) {
+        const showAdminPanel = isAdminUser(currentUser);
+        adminPanel.hidden = !showAdminPanel;
+        adminPanel.classList.toggle("hidden", !showAdminPanel);
+    }
     employeeList.innerHTML = "";
-    renderAuthUserList();
-    setAuthFeedback("Create or access a user account stored locally in this browser.");
+    renderAdminAccountList();
 
     state.employees.forEach((employee) => {
         const row = document.createElement("div");
@@ -1969,7 +2737,7 @@ function openSettings(options = {}) {
     modal.setAttribute("aria-hidden", "false");
     syncAuthUI();
     if (options.focusAuth) {
-        document.getElementById("authUsernameInput").focus();
+        accountUsernameInput.focus();
     }
 }
 
@@ -2013,24 +2781,22 @@ function saveSettings() {
 }
 
 function hardResetAllData() {
-    const confirmed = window.confirm("Are you sure you want to Reset all information?");
+    const currentUser = getCurrentUser();
+    if (!currentUser) {
+        return;
+    }
+    const confirmed = window.confirm(`Are you sure you want to reset only ${currentUser.username}'s saved data?`);
     if (!confirmed) {
         return;
     }
 
-    auth.users.forEach((user) => {
-        localStorage.removeItem(getUserStorageKey(user.id));
-        localStorage.removeItem(getUserBackupKey(user.id));
-    });
-    localStorage.removeItem(STORAGE_KEY);
-    localStorage.removeItem(BACKUP_KEY);
-    localStorage.removeItem(AUTH_STORAGE_KEY);
-    auth = cloneState(createDefaultAuthState());
-    pendingMigrationState = null;
+    localStorage.removeItem(getUserStorageKey(currentUser.id));
+    localStorage.removeItem(getUserBackupKey(currentUser.id));
     state = cloneState(createDefaultState());
     activeTab = "all";
     activeView = "schedule";
     setActiveView(activeView);
+    saveState();
     applyTheme();
     render();
     closeSettings();
@@ -2075,6 +2841,8 @@ function updateThemeFromInput() {
 
 function populateReportScope() {
     const list = document.getElementById("reportEmployeeList");
+    const fromDate = document.getElementById("reportFromDate");
+    const toDate = document.getElementById("reportToDate");
     list.innerHTML = "";
     state.employees.forEach((employee) => {
         const label = document.createElement("label");
@@ -2089,6 +2857,43 @@ function populateReportScope() {
         list.appendChild(label);
     });
     document.getElementById("selectAllEmployees").checked = true;
+    if (fromDate) {
+        fromDate.value = "";
+    }
+    if (toDate) {
+        toDate.value = "";
+    }
+    renderReportPreview();
+}
+
+function clearReportFilters() {
+    document.querySelectorAll("#reportEmployeeList input").forEach((checkbox) => {
+        checkbox.checked = true;
+    });
+    const selectAll = document.getElementById("selectAllEmployees");
+    const fromDate = document.getElementById("reportFromDate");
+    const toDate = document.getElementById("reportToDate");
+    if (selectAll) {
+        selectAll.checked = true;
+    }
+    if (fromDate) {
+        fromDate.value = "";
+    }
+    if (toDate) {
+        toDate.value = "";
+    }
+    renderReportPreview();
+}
+
+function getReportRowDisplay(row) {
+    const employee = state.employees.find((entry) => entry.id === row.employeeId);
+    const workSetup = getDisplayWorkSetup(row, employee);
+    const wfoStatus = workSetup === "WFO" ? getWfoStatusLabel(row) : "";
+    return {
+        workSetup,
+        wfoStatus,
+        employee,
+    };
 }
 
 function buildReportRows() {
@@ -2106,11 +2911,54 @@ function buildReportRows() {
             const matchesFrom = fromDate ? rowDate >= parseDateValue(fromDate) : true;
             const matchesTo = toDate ? rowDate <= parseDateValue(toDate) : true;
             if (matchesFrom && matchesTo) {
-                rows.push({ employee: employee.name, ...row });
+                rows.push({ employee: employee.name, employeeId: employee.id, ...row });
             }
         });
     });
-    return rows;
+    return rows.sort((left, right) => {
+        if (left.employee !== right.employee) {
+            return left.employee.localeCompare(right.employee);
+        }
+        return parseDateValue(left.dateValue) - parseDateValue(right.dateValue);
+    });
+}
+
+function renderReportPreview() {
+    const content = document.getElementById("reportPreviewContent");
+    const summary = document.getElementById("reportPreviewSummary");
+    if (!content || !summary) {
+        return;
+    }
+
+    const rows = buildReportRows();
+    content.innerHTML = "";
+
+    if (!rows.length) {
+        summary.textContent = "No rows selected yet.";
+        content.innerHTML = '<p class="help-text">Choose employees or a date range to preview the report rows here.</p>';
+        return;
+    }
+
+    const wfoCount = rows.filter((row) => getReportRowDisplay(row).workSetup === "WFO").length;
+    summary.textContent = `${rows.length} row(s) selected • ${wfoCount} WFO row(s)`;
+
+    const tableWrap = document.createElement("div");
+    tableWrap.className = "report-preview-table-wrap";
+    const table = document.createElement("table");
+    table.className = "report-preview-table";
+    table.innerHTML = `<thead><tr><th>Employee</th><th>Date</th><th>Week</th><th>Month</th><th>Day</th><th>Processing Time</th><th>WFO Wave</th><th>Work Setup</th><th>WFO Status</th><th>Accuracy</th><th>Unapproved Leave</th><th>Change Month</th><th>Change Date</th></tr></thead>`;
+    const tbody = document.createElement("tbody");
+
+    rows.forEach((row) => {
+        const { workSetup, wfoStatus } = getReportRowDisplay(row);
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${row.employee}</td><td>${row.dateValue}</td><td>${getWeekLabel(row.dateValue)}</td><td>${getDisplayDate(row.dateValue).month}</td><td>${getDisplayDate(row.dateValue).day}</td><td>${row.processingTime || ""}</td><td>${row.wfoWave || ""}</td><td>${workSetup || ""}</td><td>${wfoStatus || ""}</td><td>${row.accuracy || ""}</td><td>${row.unapprovedLeave || ""}</td><td>${row.changeScheduleMonth || ""}</td><td>${row.changeScheduleDate || ""}</td>`;
+        tbody.appendChild(tr);
+    });
+
+    table.appendChild(tbody);
+    tableWrap.appendChild(table);
+    content.appendChild(tableWrap);
 }
 
 function downloadReport() {
@@ -2119,9 +2967,10 @@ function downloadReport() {
         window.alert("No data to export.");
         return;
     }
-    const header = ["Employee", "Date", "Week", "Month", "Day", "Processing Time", "WFO Wave", "Work Setup", "Accuracy", "Unapproved Leave", "Change Schedule Month", "Change Schedule Date"];
+    const header = ["Employee", "Date", "Week", "Month", "Day", "Processing Time", "WFO Wave", "Work Setup", "WFO Status", "Accuracy", "Unapproved Leave", "Change Schedule Month", "Change Schedule Date"];
     const csvRows = [header.join(",")];
     rows.forEach((row) => {
+        const { workSetup, wfoStatus } = getReportRowDisplay(row);
         const values = [
             row.employee,
             row.dateValue,
@@ -2130,7 +2979,8 @@ function downloadReport() {
             getDisplayDate(row.dateValue).day,
             row.processingTime,
             row.wfoWave,
-            getDisplayWorkSetup(row),
+            workSetup,
+            wfoStatus,
             row.accuracy,
             row.unapprovedLeave,
             row.changeScheduleMonth,
@@ -2172,13 +3022,9 @@ function render() {
 function setupEvents() {
     document.getElementById("settingsBtn").addEventListener("click", openSettings);
     document.getElementById("authShortcutBtn").addEventListener("click", () => {
-        if (getCurrentUser()) {
-            logOutUser();
-            return;
-        }
-        openSettings({ focusAuth: true });
+        openAuthModal();
     });
-    document.getElementById("openAccessSettingsBtn").addEventListener("click", () => openSettings({ focusAuth: true }));
+    document.getElementById("openAuthModalBtn").addEventListener("click", openAuthModal);
     document.getElementById("addRowBtn").addEventListener("click", addRow);
     document.getElementById("sequenceDatesBtn").addEventListener("click", sequenceCurrentMonthDates);
     document.getElementById("saveSettingsBtn").addEventListener("click", saveSettings);
@@ -2187,12 +3033,26 @@ function setupEvents() {
     document.getElementById("signUpBtn").addEventListener("click", signUpUser);
     document.getElementById("logInBtn").addEventListener("click", logInUser);
     document.getElementById("logOutBtn").addEventListener("click", logOutUser);
+    document.getElementById("updateAccountBtn").addEventListener("click", updateCurrentAccount);
+    document.getElementById("deleteCurrentAccountBtn").addEventListener("click", () => {
+        const currentUser = getCurrentUser();
+        if (currentUser) {
+            openDeleteAccountModal(currentUser.id);
+        }
+    });
     document.getElementById("confirmDeleteAccountBtn").addEventListener("click", confirmDeleteAccount);
     document.getElementById("cancelDeleteAccountBtn").addEventListener("click", closeDeleteAccountModal);
     document.getElementById("hardResetBtn").addEventListener("click", hardResetAllData);
     document.getElementById("restoreDefaultsBtn").addEventListener("click", restoreDefaultTheme);
+    document.getElementById("openQuickGuideBtn").addEventListener("click", reopenQuickGuide);
+    document.getElementById("clearAdminSearchBtn").addEventListener("click", clearAdminSearch);
     document.getElementById("viewScopeBtn").addEventListener("click", openScopeGuide);
     document.getElementById("closeScopeBtn").addEventListener("click", closeScopeGuide);
+    document.getElementById("clearReportFiltersBtn").addEventListener("click", clearReportFilters);
+    document.getElementById("previousGuideBtn").addEventListener("click", previousGuideStep);
+    document.getElementById("hideGuideForeverBtn").addEventListener("click", disableGuideForCurrentUser);
+    document.getElementById("nextGuideBtn").addEventListener("click", nextGuideStep);
+    document.getElementById("skipGuideBtn").addEventListener("click", closeGuide);
 
     document.getElementById("settingsModal").addEventListener("click", () => {
         // Keep settings open when clicking outside; close only via Save or Cancel.
@@ -2200,6 +3060,16 @@ function setupEvents() {
     document.getElementById("deleteAccountModal").addEventListener("click", (event) => {
         if (event.target.id === "deleteAccountModal") {
             closeDeleteAccountModal();
+        }
+    });
+    document.getElementById("authModal").addEventListener("click", (event) => {
+        if (event.target.id === "authModal" && getCurrentUser()) {
+            closeAuthModal();
+        }
+    });
+    document.getElementById("guideModal").addEventListener("click", (event) => {
+        if (event.target.id === "guideModal") {
+            closeGuide();
         }
     });
     document.getElementById("reportModal").addEventListener("click", (event) => {
@@ -2222,7 +3092,15 @@ function setupEvents() {
         document.querySelectorAll("#reportEmployeeList input").forEach((checkbox) => {
             checkbox.checked = event.target.checked;
         });
+        renderReportPreview();
     });
+
+    document.getElementById("reportEmployeeList").addEventListener("change", renderReportPreview);
+    document.getElementById("reportFromDate").addEventListener("change", renderReportPreview);
+    document.getElementById("reportToDate").addEventListener("change", renderReportPreview);
+    document.getElementById("adminAccountSearchInput").addEventListener("input", renderAdminAccountList);
+    window.addEventListener("resize", refreshActiveGuidePosition);
+    window.addEventListener("scroll", refreshActiveGuidePosition, true);
 
     document.getElementById("menuBtn").addEventListener("click", () => {
         const sideNav = document.getElementById("sideNav");
