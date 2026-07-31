@@ -440,6 +440,55 @@ tr.row-wfo {
   color: var(--danger);
 }
 
+.setup-badge.wfo-reason-tooltip {
+  position: relative;
+}
+
+.setup-badge.wfo-reason-tooltip::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 10px);
+  transform: translateX(-50%) translateY(4px);
+  min-width: 180px;
+  max-width: 260px;
+  padding: 7px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(37, 99, 235, 0.2);
+  background: #0f172a;
+  color: #f8fafc;
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: center;
+  box-shadow: 0 10px 24px rgba(2, 6, 23, 0.28);
+  opacity: 0;
+  pointer-events: none;
+  z-index: 20;
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.setup-badge.wfo-reason-tooltip::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: calc(100% + 4px);
+  transform: translateX(-50%) translateY(4px);
+  border-width: 6px;
+  border-style: solid;
+  border-color: #0f172a transparent transparent transparent;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 21;
+  transition: opacity 140ms ease, transform 140ms ease;
+}
+
+.setup-badge.wfo-reason-tooltip:hover::after,
+.setup-badge.wfo-reason-tooltip:hover::before {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
 .stack-list {
   display: grid;
   gap: 12px;
