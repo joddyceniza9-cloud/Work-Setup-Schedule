@@ -28,7 +28,8 @@
           <span>Month</span>
           <button id="monthFilterBtn" type="button" class="filter-toggle">Select Month(s)</button>
           <div id="monthFilterMenu" class="filter-menu hidden" role="menu" aria-label="Select months">
-            <label class="checkbox-row"><input type="checkbox" id="monthSelectAll" /> Select all</label>
+            <label class="checkbox-row"><input type="checkbox" id="monthSelectAll" /> <span
+                id="monthSelectAllLabel">Select all</span></label>
             <div id="monthFilterList" class="filter-checklist"></div>
           </div>
         </div>
@@ -36,10 +37,24 @@
           <span>Week</span>
           <button id="weekFilterBtn" type="button" class="filter-toggle">Select Week(s)</button>
           <div id="weekFilterMenu" class="filter-menu hidden" role="menu" aria-label="Select weeks">
-            <label class="checkbox-row"><input type="checkbox" id="weekSelectAll" /> Select all</label>
+            <label class="checkbox-row"><input type="checkbox" id="weekSelectAll" /> <span
+                id="weekSelectAllLabel">Select all</span></label>
             <div id="weekFilterList" class="filter-checklist"></div>
           </div>
         </div>
+        <div class="filter-pill multi-filter" id="dayFilterBox">
+          <span>Day</span>
+          <button id="dayFilterBtn" type="button" class="filter-toggle">Select Day(s)</button>
+          <div id="dayFilterMenu" class="filter-menu hidden" role="menu" aria-label="Select days">
+            <label class="checkbox-row"><input type="checkbox" id="daySelectAll" /> <span id="daySelectAllLabel">Select
+                all</span></label>
+            <div id="dayFilterList" class="filter-checklist"></div>
+          </div>
+        </div>
+        <label class="filter-pill">
+          <span>Task</span>
+          <select id="subtradeFilter"></select>
+        </label>
         <div id="currentUserPill" class="filter-pill user-pill">User: none</div>
         <button id="authShortcutBtn" class="secondary-btn" aria-label="Manage account access">Log In</button>
         <button id="settingsBtn" class="primary-btn fb-settings-btn" aria-label="Open settings">⚙ Settings</button>
@@ -51,6 +66,7 @@
       <button class="nav-link" data-view="summary">WFO Summary</button>
       <button class="nav-link" data-view="credits">WFH Credits</button>
       <button class="nav-link" data-view="dashboard">Dashboard</button>
+      <button class="nav-link" id="manualCreditLogsNavBtn" type="button">Manual Credit Logs</button>
       <button class="nav-link" data-view="trash">Trash Bin</button>
       <button class="nav-link" id="generateReportBtn" data-view="report">Generate Report</button>
     </nav>
@@ -73,13 +89,14 @@
           <table>
             <thead>
               <tr>
+                <th>Task</th>
                 <th>Employee</th>
                 <th>Week</th>
                 <th>Month</th>
                 <th>Date</th>
                 <th>Day</th>
                 <th>Processing Time</th>
-                <th>WFO Wave</th>
+                <th>WFO Waive</th>
                 <th>Work Setup</th>
                 <th>Accuracy</th>
                 <th>Unapproved Leave</th>
@@ -111,7 +128,7 @@
         <div class="table-actions">
           <div class="table-title">
             <h2>WFH Credits</h2>
-            <p id="wfhCreditRuleText">Set WFH Credits per Week in Settings to enable credit earning.</p>
+            <p id="wfhCreditRuleText">Credit earning is based on each employee's Task target settings.</p>
           </div>
         </div>
         <div id="creditsContent" class="stack-list"></div>
@@ -140,6 +157,26 @@
                 <option value="contributors">Employee Contributors</option>
               </select>
             </label>
+            <div class="filter-pill multi-filter" id="dashboardMetricFilterBox">
+              <span>Metrics</span>
+              <button id="dashboardMetricFilterBtn" type="button" class="filter-toggle">All Metrics</button>
+              <div id="dashboardMetricFilterMenu" class="filter-menu hidden" role="menu"
+                aria-label="Select dashboard metrics">
+                <label class="checkbox-row"><input type="checkbox" id="dashboardMetricSelectAll" /> <span
+                    id="dashboardMetricSelectAllLabel">Select all</span></label>
+                <div id="dashboardMetricFilterList" class="filter-checklist"></div>
+              </div>
+            </div>
+            <div class="filter-pill multi-filter" id="dashboardContributorFilterBox">
+              <span>Names</span>
+              <button id="dashboardContributorFilterBtn" type="button" class="filter-toggle">All Names</button>
+              <div id="dashboardContributorFilterMenu" class="filter-menu hidden" role="menu"
+                aria-label="Select employee contributor names">
+                <label class="checkbox-row"><input type="checkbox" id="dashboardContributorSelectAll" /> <span
+                    id="dashboardContributorSelectAllLabel">Select all</span></label>
+                <div id="dashboardContributorFilterList" class="filter-checklist"></div>
+              </div>
+            </div>
           </div>
         </div>
         <div id="dashboardContent" class="dashboard-grid"></div>
@@ -213,19 +250,75 @@
           <input id="headerNameInput" type="text" placeholder="Enter header name" />
         </label>
 
-        <label class="field">
-          <span>Target Processing Time (HH:MM:SS)</span>
-          <input id="targetProcessingTimeInput" type="text" placeholder="" />
-        </label>
-
-        <label class="field">
-          <span>WFH Credits per Week</span>
-          <input id="weeklyWfhCreditTargetInput" type="number" min="1" />
-        </label>
-
-        <div class="settings-list">
+        <div class="settings-list settings-nav-row" data-target-modal="activeAccountSettingsModal" role="button"
+          tabindex="0" aria-label="Open Active Account settings">
           <div class="settings-list-header">
             <h3>Active Account</h3>
+            <span aria-hidden="true">›</span>
+          </div>
+        </div>
+
+        <div class="settings-list settings-nav-row" data-target-modal="themeSettingsModal" role="button" tabindex="0"
+          aria-label="Open Theme Colors settings">
+          <div class="settings-list-header">
+            <h3>Theme Colors</h3>
+            <span aria-hidden="true">›</span>
+          </div>
+        </div>
+
+        <div class="settings-list settings-nav-row" data-target-modal="subtradeTargetsSettingsModal" role="button"
+          tabindex="0" aria-label="Open Task Target Processing Time settings">
+          <div class="settings-list-header">
+            <h3>Task Target Processing Time</h3>
+            <span aria-hidden="true">›</span>
+          </div>
+        </div>
+
+        <div class="settings-list settings-nav-row" data-target-modal="quickGuideSettingsModal" role="button"
+          tabindex="0" aria-label="Open Quick Guide settings">
+          <div class="settings-list-header">
+            <h3>Quick Guide</h3>
+            <span aria-hidden="true">›</span>
+          </div>
+        </div>
+
+        <div class="settings-list settings-nav-row" data-target-modal="viewScopeSettingsModal" role="button"
+          tabindex="0" aria-label="Open View Tool Scope settings">
+          <div class="settings-list-header">
+            <h3>View Tool Scope</h3>
+            <span aria-hidden="true">›</span>
+          </div>
+        </div>
+
+        <div class="settings-list settings-nav-row" data-target-modal="employeeNamesSettingsModal" role="button"
+          tabindex="0" aria-label="Open Employee Names settings">
+          <div class="settings-list-header">
+            <h3>Employee Names</h3>
+            <span aria-hidden="true">›</span>
+          </div>
+        </div>
+
+        <div class="settings-list settings-nav-row" data-target-modal="hardResetSettingsModal" role="button"
+          tabindex="0" aria-label="Open Hard Reset settings">
+          <div class="settings-list-header">
+            <h3>Hard Reset</h3>
+            <span aria-hidden="true">›</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="activeAccountSettingsModal" class="modal hidden settings-detail-modal" aria-hidden="true">
+    <div class="modal-card settings-detail-card">
+      <div class="modal-header">
+        <h2>Active Account</h2>
+        <button id="closeActiveAccountSettingsBtn" class="secondary-btn" type="button">Close</button>
+      </div>
+      <div class="settings-scroll-area">
+        <div class="settings-list">
+          <div class="settings-list-header">
+            <h3>Account Actions</h3>
             <button id="logOutBtn" class="secondary-btn" type="button">Log Out</button>
           </div>
           <p id="currentUserText" class="help-text settings-status">No user is logged in.</p>
@@ -260,11 +353,21 @@
           </label>
           <div id="adminAccountList" class="account-list admin-account-list"></div>
         </div>
+      </div>
+    </div>
+  </div>
 
+  <div id="themeSettingsModal" class="modal hidden settings-detail-modal" aria-hidden="true">
+    <div class="modal-card settings-detail-card">
+      <div class="modal-header">
+        <h2>Theme Colors</h2>
+        <button id="closeThemeSettingsBtn" class="secondary-btn" type="button">Close</button>
+      </div>
+      <div class="settings-scroll-area">
         <div class="settings-list">
           <div class="settings-list-header">
-            <h3>Theme Colors</h3>
-            <button id="restoreDefaultsBtn" class="secondary-btn">Restore Default</button>
+            <h3>Theme Palette</h3>
+            <button id="restoreDefaultsBtn" class="secondary-btn" type="button">Restore Default</button>
           </div>
           <div class="color-grid">
             <label class="field compact">
@@ -285,35 +388,281 @@
             </label>
           </div>
         </div>
+      </div>
+    </div>
+  </div>
 
+  <div id="subtradeTargetsSettingsModal" class="modal hidden settings-detail-modal" aria-hidden="true">
+    <div class="modal-card settings-detail-card">
+      <div class="modal-header">
+        <h2>Task Target Processing Time</h2>
+        <button id="closeSubtradeTargetsSettingsBtn" class="secondary-btn" type="button">Close</button>
+      </div>
+      <div class="settings-scroll-area">
         <div class="settings-list">
-          <div class="settings-list-header">
-            <h3>Quick Guide</h3>
-            <button id="openQuickGuideBtn" class="secondary-btn" type="button">Open Quick Guide</button>
+          <div class="subtrade-target-add-row">
+            <label class="field compact">
+              <span class="target-label"><span class="target-label-badge">TSK</span><span>Task</span></span>
+              <input id="subtradeTargetNameInput" class="input-field" type="text" placeholder="e.g. Billing" />
+            </label>
+            <label class="field compact">
+              <span class="target-label"><span class="target-label-badge">TPT</span><span>Target Processing Time
+                  (HH:MM:SS)</span></span>
+              <input id="subtradeTargetValueInput" class="input-field" type="text" placeholder="e.g. 01:30:00" />
+            </label>
+            <label class="field compact">
+              <span class="target-label"><span class="target-label-badge">WCR</span><span>WFH Occurrences Required in a
+                  Week to Earn 1 Credit</span></span>
+              <input id="subtradeTargetWeeklyCreditInput" class="input-field" type="number" min="1"
+                placeholder="e.g. 2" />
+            </label>
+            <fieldset class="field compact leave-count-fieldset">
+              <legend><span class="target-label"><span class="target-label-badge">LVC</span><span>Count leave toward WFH
+                    Credit</span></span></legend>
+              <div class="leave-count-grid">
+                <label class="leave-count-item"><input id="subtradeTargetCountLeaveOFFInput" type="checkbox"
+                    value="OFF" />OFF</label>
+                <label class="leave-count-item"><input id="subtradeTargetCountLeaveMLInput" type="checkbox"
+                    value="ML" />ML</label>
+                <label class="leave-count-item"><input id="subtradeTargetCountLeavePLInput" type="checkbox"
+                    value="PL" />PL</label>
+                <label class="leave-count-item"><input id="subtradeTargetCountLeaveTLInput" type="checkbox"
+                    value="TL" />TL</label>
+                <label class="leave-count-item"><input id="subtradeTargetCountLeaveVLInput" type="checkbox"
+                    value="VL" />VL</label>
+              </div>
+            </fieldset>
+            <label class="field compact">
+              <span class="target-label"><span class="target-label-badge">CLR</span><span>Task Color</span></span>
+              <input id="subtradeTargetColorInput" type="color" value="#2563eb" />
+            </label>
+            <div class="subtrade-target-add-actions">
+              <button id="addSubtradeTargetBtn" class="secondary-btn" type="button">Add</button>
+              <button id="cancelSubtradeTargetEditBtn" class="secondary-btn hidden" type="button" hidden>Cancel</button>
+            </div>
           </div>
+          <p id="subtradeTargetFeedback" class="help-text auth-feedback">Add task-specific target processing time
+            and WFH credit rule.</p>
+          <div id="subtradeTargetList" class="subtrade-target-list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="quickGuideSettingsModal" class="modal hidden settings-detail-modal" aria-hidden="true">
+    <div class="modal-card settings-detail-card compact-modal-card">
+      <div class="modal-header">
+        <h2>Quick Guide</h2>
+        <button id="closeQuickGuideSettingsBtn" class="secondary-btn" type="button">Close</button>
+      </div>
+      <p class="help-text">Run the guided walkthrough to review filters, schedule actions, dashboard, and reporting
+        tools.</p>
+      <div class="auth-actions">
+        <button id="openQuickGuideBtn" class="secondary-btn" type="button">Open Quick Guide</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="viewScopeSettingsModal" class="modal hidden settings-detail-modal" aria-hidden="true">
+    <div class="modal-card settings-detail-card compact-modal-card">
+      <div class="modal-header">
+        <h2>View Tool Scope</h2>
+        <button id="closeViewScopeSettingsBtn" class="secondary-btn" type="button">Close</button>
+      </div>
+      <p class="help-text">Open the scope window to view what this planner tracks and the main workflows per view.</p>
+      <div class="auth-actions">
+        <button id="viewScopeBtn" class="secondary-btn" type="button">Open Scope Info</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="employeeNamesSettingsModal" class="modal hidden settings-detail-modal" aria-hidden="true">
+    <div class="modal-card settings-detail-card">
+      <div class="modal-header">
+        <h2>Employee Names</h2>
+        <button id="closeEmployeeNamesSettingsBtn" class="secondary-btn" type="button">Close</button>
+      </div>
+      <div class="auth-actions">
+        <button id="addEmployeeBtn" class="secondary-btn" type="button" aria-label="Add employee"
+          title="Add employee">Add</button>
+      </div>
+      <div id="employeeSettingsList" class="employee-settings-list"></div>
+    </div>
+  </div>
+
+  <div id="hardResetSettingsModal" class="modal hidden settings-detail-modal" aria-hidden="true">
+    <div class="modal-card settings-detail-card compact-modal-card">
+      <div class="modal-header">
+        <h2>Hard Reset</h2>
+        <button id="closeHardResetSettingsBtn" class="secondary-btn" type="button">Close</button>
+      </div>
+      <p class="help-text">Reset only the currently active account and clear its saved local schedule data.</p>
+      <div class="auth-actions">
+        <button id="hardResetBtn" class="danger-btn" type="button">Reset Current Account</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="hardResetPasswordModal" class="modal hidden" aria-hidden="true">
+    <div class="modal-card compact-modal-card">
+      <div class="modal-header">
+        <h2>Confirm Hard Reset</h2>
+        <button id="cancelHardResetPasswordBtn" class="secondary-btn" type="button">Cancel</button>
+      </div>
+      <p id="hardResetPasswordPrompt" class="help-text">Enter the account password to confirm deletion.</p>
+      <label class="field">
+        <span>Confirm Password</span>
+        <input id="hardResetPasswordInput" class="input-field" type="password" placeholder="Enter password" />
+      </label>
+      <p id="hardResetPasswordFeedback" class="help-text auth-feedback">Enter the account password to confirm deletion.
+      </p>
+      <div class="auth-actions">
+        <button id="confirmHardResetPasswordBtn" class="danger-btn" type="button">Reset Current Account</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="addEmployeeTabModal" class="modal hidden settings-detail-modal" aria-hidden="true">
+    <div class="modal-card settings-detail-card compact-modal-card">
+      <div class="modal-header">
+        <h2>Add Employee</h2>
+        <button id="cancelAddEmployeeTabBtn" class="secondary-btn" type="button">Cancel</button>
+      </div>
+      <label class="field">
+        <span>Employee Name</span>
+        <input id="addEmployeeTabNameInput" class="input-field" type="text" placeholder="Enter employee name" />
+      </label>
+      <label class="field">
+        <span>Task</span>
+        <select id="addEmployeeTabSubtradeInput" class="select-field"></select>
+      </label>
+      <label class="field compact">
+        <span>Employee Color</span>
+        <input id="addEmployeeTabColorInput" type="color" value="#2563eb" />
+      </label>
+      <p id="addEmployeeTabFeedback" class="help-text auth-feedback">Type a name to create a new employee tab.</p>
+      <div class="auth-actions">
+        <button id="confirmAddEmployeeTabBtn" class="primary-btn" type="button">Add Employee</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="manualWfhCreditOptionsModal" class="modal hidden settings-detail-modal" aria-hidden="true">
+    <div class="modal-card settings-detail-card manual-credit-fullscreen-card">
+      <div class="modal-header">
+        <h2>Manual WFH Credit Options</h2>
+        <button id="closeManualWfhCreditOptionsBtn" class="secondary-btn" type="button">Close</button>
+      </div>
+      <div class="settings-scroll-area">
+        <div class="settings-list">
+          <div class="manual-credit-grid">
+            <label class="field">
+              <span>Specific Employee</span>
+              <select id="manualCreditEmployeeSelect" class="select-field"></select>
+            </label>
+            <label class="field">
+              <span>Manual WFH Credit Occurrences Required in a Week</span>
+              <input id="manualCreditOccurrenceInput" class="input-field" type="number" min="1" placeholder="e.g. 2" />
+            </label>
+          </div>
+          <p class="help-text manual-credit-scope-note">For reflected/projection WFH rows, the selected week applies to
+            the source trigger week.</p>
+
+          <div class="manual-credit-grid">
+            <div class="field">
+              <span>Specific Year (multiple)</span>
+              <div id="manualCreditYearList" class="selection-grid"></div>
+            </div>
+            <div class="field">
+              <span>Specific Month (multiple)</span>
+              <div id="manualCreditMonthList" class="selection-grid"></div>
+            </div>
+            <div class="field">
+              <span>Specific Week (multiple)</span>
+              <div id="manualCreditWeekList" class="selection-grid"></div>
+            </div>
+          </div>
+
+          <div class="auth-actions">
+            <button id="addManualCreditRuleBtn" class="primary-btn" type="button">Add Manual Credit Log</button>
+          </div>
+          <p id="manualCreditFeedback" class="help-text auth-feedback">Add a log to override the general WFH credit rule
+            for selected employee and time scope.</p>
         </div>
 
         <div class="settings-list">
           <div class="settings-list-header">
-            <h3>View Tool Scope</h3>
-            <button id="viewScopeBtn" class="secondary-btn">Open Scope Info</button>
+            <h3>Manual Credit Logs</h3>
           </div>
+          <div class="manual-credit-filter-bar">
+            <label class="field compact">
+              <span>Search</span>
+              <input id="manualCreditSearchInput" class="input-field" type="text"
+                placeholder="Search employee, year, month, week" />
+            </label>
+            <label class="field compact">
+              <span>Year</span>
+              <select id="manualCreditFilterYear" class="select-field">
+                <option value="all">All Years</option>
+              </select>
+            </label>
+            <label class="field compact">
+              <span>Month</span>
+              <select id="manualCreditFilterMonth" class="select-field">
+                <option value="all">All Months</option>
+              </select>
+            </label>
+            <label class="field compact">
+              <span>Week</span>
+              <select id="manualCreditFilterWeek" class="select-field">
+                <option value="all">All Weeks</option>
+              </select>
+            </label>
+            <div class="manual-credit-filter-actions">
+              <button id="clearManualCreditFiltersBtn" class="secondary-btn" type="button">Clear Filters</button>
+            </div>
+          </div>
+          <div id="manualCreditEmployeeTabs" class="tabs compact-tabs"></div>
+          <div id="manualCreditRuleList" class="manual-credit-log-list"></div>
         </div>
+      </div>
+    </div>
+  </div>
 
-        <div class="settings-list">
-          <div class="settings-list-header">
-            <h3>Employee Names</h3>
-            <button id="addEmployeeBtn" class="secondary-btn">Add Employee</button>
-          </div>
-          <div id="employeeSettingsList" class="employee-settings-list"></div>
-        </div>
+  <div id="manualWfoModal" class="modal hidden" aria-hidden="true">
+    <div class="modal-card compact-modal-card">
+      <div class="modal-header">
+        <h2>Manual WFO</h2>
+        <button id="cancelManualWfoBtn" class="secondary-btn" type="button">Cancel</button>
+      </div>
+      <p id="manualWfoPromptTitle" class="help-text settings-status">Select a row to add remarks.</p>
+      <label class="field">
+        <span>Reason for WFO Ongoing</span>
+        <textarea id="manualWfoRemarksInput" class="text-area" placeholder="Type your reason here..."></textarea>
+      </label>
+      <p id="manualWfoFeedback" class="help-text auth-feedback">Add a reason why this specific row should be tagged as
+        WFO Ongoing.</p>
+      <div class="auth-actions">
+        <button id="saveManualWfoBtn" class="primary-btn" type="button">Apply Manual WFO</button>
+      </div>
+    </div>
+  </div>
 
-        <div class="settings-list">
-          <div class="settings-list-header">
-            <h3>Hard Reset</h3>
-            <button id="hardResetBtn" class="danger-btn">Reset Current Account</button>
-          </div>
-        </div>
+  <div id="manualWfhModal" class="modal hidden" aria-hidden="true">
+    <div class="modal-card compact-modal-card">
+      <div class="modal-header">
+        <h2>Manual WFH</h2>
+        <button id="cancelManualWfhBtn" class="secondary-btn" type="button">Cancel</button>
+      </div>
+      <p id="manualWfhPromptTitle" class="help-text settings-status">Select a row to add remarks.</p>
+      <label class="field">
+        <span>Reason for WFH</span>
+        <textarea id="manualWfhRemarksInput" class="text-area" placeholder="Type your reason here..."></textarea>
+      </label>
+      <p id="manualWfhFeedback" class="help-text auth-feedback">Add a reason why this specific row should be tagged as
+        WFH.</p>
+      <div class="auth-actions">
+        <button id="saveManualWfhBtn" class="primary-btn" type="button">Apply Manual WFH</button>
       </div>
     </div>
   </div>
@@ -333,9 +682,19 @@
       <div class="guide-actions">
         <button id="previousGuideBtn" class="secondary-btn" type="button">Previous</button>
         <button id="hideGuideForeverBtn" class="secondary-btn" type="button">Don't Show Again</button>
-        <button id="skipGuideBtn" class="secondary-btn" type="button">Skip</button>
+        <button id="skipGuideBtn" class="secondary-btn" type="button">Restart</button>
         <button id="nextGuideBtn" class="primary-btn" type="button">Next</button>
       </div>
+    </div>
+  </div>
+
+  <div id="contributorDashboardModal" class="modal hidden" aria-hidden="true">
+    <div class="modal-card scope-card contributor-dashboard-modal-card">
+      <div class="modal-header">
+        <h2 id="contributorDashboardModalTitle">Employee Dashboard</h2>
+        <button id="closeContributorDashboardBtn" class="secondary-btn" type="button">Close</button>
+      </div>
+      <div id="contributorDashboardModalContent" class="dashboard-grid"></div>
     </div>
   </div>
 
