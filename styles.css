@@ -63,6 +63,13 @@ button {
   align-items: center;
   gap: 12px;
   margin-bottom: 16px;
+  position: sticky;
+  top: 0;
+  z-index: 24;
+  padding: 10px 0 12px;
+  background: color-mix(in srgb, var(--app-bg) 78%, #ffffff 22%);
+  backdrop-filter: blur(4px);
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 72%, var(--primary) 28%);
 }
 
 .topbar-left,
@@ -167,6 +174,18 @@ p {
   color: var(--muted);
 }
 
+.filter-pill>span:first-child {
+  padding-right: 2px;
+  margin-right: 0;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--text) 72%, var(--primary) 28%);
+}
+
+.filter-pill select,
+.filter-pill .filter-toggle {
+  padding-left: 2px;
+}
+
 .user-pill {
   font-weight: 700;
 }
@@ -195,6 +214,46 @@ p {
   text-overflow: ellipsis;
   overflow: hidden;
   white-space: nowrap;
+}
+
+#yearFilterBox,
+#taskFilterBox,
+#monthFilterBox,
+#weekFilterBox,
+#dayFilterBox {
+  position: relative;
+  padding-right: 24px;
+}
+
+#yearFilterBox::after,
+#taskFilterBox::after,
+#monthFilterBox::after,
+#weekFilterBox::after,
+#dayFilterBox::after {
+  content: "▾";
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: color-mix(in srgb, var(--text) 58%, var(--muted) 42%);
+  line-height: 1;
+  pointer-events: none;
+}
+
+#monthFilterBtn,
+#weekFilterBtn,
+#dayFilterBtn {
+  padding-right: 10px;
+}
+
+#yearFilter,
+#subtradeFilter {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  padding-right: 14px;
 }
 
 .filter-menu {
@@ -436,6 +495,15 @@ tr.row-wfo {
 .table-wrap table td:nth-child(7) {
   width: 126px;
   min-width: 126px;
+}
+
+.table-wrap table th:nth-child(7),
+.table-wrap table td:nth-child(7),
+.table-wrap table th:nth-child(10),
+.table-wrap table td:nth-child(10),
+.table-wrap table th:nth-child(12),
+.table-wrap table td:nth-child(12) {
+  border-left: 2px solid var(--border);
 }
 
 .processing-time-input {
