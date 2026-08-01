@@ -1243,6 +1243,48 @@ function getAvailableDayValues(year, months, weeks, subtrade) {
     return Array.from(dateValues).sort((left, right) => parseDateValue(left) - parseDateValue(right));
 }
 
+function includeDateInActiveFilters(dateValue) {
+    if (!dateValue) {
+        return;
+    }
+    const date = parseDateValue(dateValue);
+    const selectedYear = Number(state.selectedYear) || 2026;
+    if (date.getFullYear() !== selectedYear) {
+        return;
+    }
+
+    const monthValue = date.getMonth() + 1;
+    const selectedMonths = Array.isArray(state.selectedMonths)
+        ? state.selectedMonths.map((value) => Number(value)).filter((value) => value >= 1 && value <= 12)
+        : [];
+    if (!selectedMonths.includes(monthValue)) {
+        selectedMonths.push(monthValue);
+        selectedMonths.sort((left, right) => left - right);
+        state.selectedMonths = selectedMonths;
+    }
+
+    const availableWeeks = getAvailableWeekValues(selectedYear, state.selectedMonths);
+    const weekValue = `${getWeekNumber(dateValue)}`;
+    const selectedWeeks = Array.isArray(state.selectedWeeks)
+        ? state.selectedWeeks.map((value) => `${value}`).filter((value) => value === "all" || availableWeeks.includes(value))
+        : [];
+    if (!selectedWeeks.includes("all") && !selectedWeeks.includes(weekValue) && availableWeeks.includes(weekValue)) {
+        selectedWeeks.push(weekValue);
+    }
+    state.selectedWeeks = selectedWeeks;
+    state.selectedWeek = state.selectedWeeks[0] || "all";
+
+    const availableDays = getAvailableDayValues(selectedYear, state.selectedMonths, state.selectedWeeks, state.selectedSubtrade);
+    const selectedDays = Array.isArray(state.selectedDays)
+        ? state.selectedDays.map((value) => `${value || ""}`.trim()).filter((value) => Boolean(value))
+        : [];
+    if (availableDays.includes(dateValue) && !selectedDays.includes(dateValue)) {
+        selectedDays.push(dateValue);
+        selectedDays.sort((left, right) => parseDateValue(left) - parseDateValue(right));
+    }
+    state.selectedDays = selectedDays.filter((value) => availableDays.includes(value));
+}
+
 function formatDayFilterLabel(dateValue) {
     const date = getDisplayDate(dateValue);
     return `${date.month} ${date.date} ${date.day}`;
@@ -2463,10 +2505,6 @@ function getBaseProjectedOutcomeFromSourceRow(row, employee) {
     if (!hasSetupInput(row)) {
         return null;
     }
-    if (row.wfoWave === "Justified") {
-        return null;
-    }
-
     const reasons = getWfoReasons(row, employee).filter((reason) => reason !== "WFO Waive" && reason !== "Change Schedule");
     if (reasons.length) {
         return { setup: "WFO", reasons };
@@ -2551,6 +2589,7 @@ function ensureProjectedResultRow(employee, row) {
             return;
         }
         employee.rows.push(createRow(projection.targetDate, { generatedByRowId: row.id }));
+        includeDateInActiveFilters(projection.targetDate);
     });
 }
 
@@ -3590,6 +3629,7 @@ function applyChangeScheduleUpdate(employeeId, rowId, monthText, dayText) {
                 changeScheduleDate: "",
                 generatedByRowId: row.id,
             }));
+            includeDateInActiveFilters(targetDateValue);
         }
         row.wfoWave = "Change Schedule";
         row.workSetup = "WFO";
@@ -3678,6 +3718,7 @@ function addRow() {
     }
     const newRow = createRow(getNextDateValue(targetEmployee));
     targetEmployee.rows.push(newRow);
+    includeDateInActiveFilters(newRow.dateValue);
     if (!ensureDateSequence(targetEmployee)) {
         targetEmployee.rows = targetEmployee.rows.filter((row) => row.id !== newRow.id);
     }
@@ -4980,48 +5021,6 @@ function renderTable() {
         processingCell.appendChild(processingInput);
         tr.appendChild(processingCell);
 
-        const wfoWaveCell = document.createElement("td");
-        const wfoWaveSelect = document.createElement("select");
-        wfoWaveSelect.className = "select-field";
-        const shouldShowChangeSchedule = displaySetup === "WFO" || row.wfoWave === "Change Schedule";
-        const waveOptions = shouldShowChangeSchedule
-            ? ["", "Justified", "Change Schedule", "Use WFH Credit"]
-            : ["", "Justified", "Use WFH Credit"];
-        waveOptions.forEach((optionValue) => {
-            const option = document.createElement("option");
-            option.value = optionValue;
-            option.textContent = optionValue || "None";
-            if (optionValue === row.wfoWave) {
-                option.selected = true;
-            }
-            wfoWaveSelect.appendChild(option);
-        });
-        wfoWaveSelect.addEventListener("change", (event) => {
-            updateRow(row.employeeId, row.id, "wfoWave", event.target.value);
-        });
-        wfoWaveCell.appendChild(wfoWaveSelect);
-        tr.appendChild(wfoWaveCell);
-
-        const workSetupCell = document.createElement("td");
-        const workSetupBadge = document.createElement("span");
-        workSetupBadge.className = workSetupClassName;
-        workSetupBadge.textContent = displaySetup === "WFO" ? `WFO ${getWfoStatusLabel(row)}` : displaySetup;
-        if (displaySetup === "WFO") {
-            const tooltipText = getWfoReasonTooltip(row, employee);
-            if (tooltipText) {
-                workSetupBadge.classList.add("wfo-reason-tooltip");
-                workSetupBadge.setAttribute("data-tooltip", tooltipText);
-            }
-        } else if (displaySetup === "WFH") {
-            const tooltipText = getWfhReasonTooltip(row, employee);
-            if (tooltipText) {
-                workSetupBadge.classList.add("wfo-reason-tooltip");
-                workSetupBadge.setAttribute("data-tooltip", tooltipText);
-            }
-        }
-        workSetupCell.appendChild(workSetupBadge);
-        tr.appendChild(workSetupCell);
-
         const accuracyCell = document.createElement("td");
         const accuracySelect = document.createElement("select");
         accuracySelect.className = "select-field";
@@ -5058,6 +5057,48 @@ function renderTable() {
         });
         leaveCell.appendChild(leaveSelect);
         tr.appendChild(leaveCell);
+
+        const workSetupCell = document.createElement("td");
+        const workSetupBadge = document.createElement("span");
+        workSetupBadge.className = workSetupClassName;
+        workSetupBadge.textContent = displaySetup === "WFO" ? `WFO ${getWfoStatusLabel(row)}` : displaySetup;
+        if (displaySetup === "WFO") {
+            const tooltipText = getWfoReasonTooltip(row, employee);
+            if (tooltipText) {
+                workSetupBadge.classList.add("wfo-reason-tooltip");
+                workSetupBadge.setAttribute("data-tooltip", tooltipText);
+            }
+        } else if (displaySetup === "WFH") {
+            const tooltipText = getWfhReasonTooltip(row, employee);
+            if (tooltipText) {
+                workSetupBadge.classList.add("wfo-reason-tooltip");
+                workSetupBadge.setAttribute("data-tooltip", tooltipText);
+            }
+        }
+        workSetupCell.appendChild(workSetupBadge);
+        tr.appendChild(workSetupCell);
+
+        const wfoWaveCell = document.createElement("td");
+        const wfoWaveSelect = document.createElement("select");
+        wfoWaveSelect.className = "select-field";
+        const shouldShowChangeSchedule = displaySetup === "WFO" || row.wfoWave === "Change Schedule";
+        const waveOptions = shouldShowChangeSchedule
+            ? ["", "Justified", "Change Schedule", "Use WFH Credit"]
+            : ["", "Justified", "Use WFH Credit"];
+        waveOptions.forEach((optionValue) => {
+            const option = document.createElement("option");
+            option.value = optionValue;
+            option.textContent = optionValue || "None";
+            if (optionValue === row.wfoWave) {
+                option.selected = true;
+            }
+            wfoWaveSelect.appendChild(option);
+        });
+        wfoWaveSelect.addEventListener("change", (event) => {
+            updateRow(row.employeeId, row.id, "wfoWave", event.target.value);
+        });
+        wfoWaveCell.appendChild(wfoWaveSelect);
+        tr.appendChild(wfoWaveCell);
 
         const changeMonthCell = document.createElement("td");
         const changeMonthSelect = document.createElement("select");
