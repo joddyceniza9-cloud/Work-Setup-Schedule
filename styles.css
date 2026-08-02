@@ -370,6 +370,13 @@ p {
   color: var(--muted);
 }
 
+.tab-employee-name {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .tab-btn.active {
   background: var(--primary);
   border-color: var(--primary);
@@ -408,6 +415,30 @@ p {
 .tab-close-btn:hover {
   background: rgba(220, 38, 38, 0.18);
   color: #b91c1c;
+}
+
+.employee-avatar {
+  width: var(--avatar-size, 28px);
+  height: var(--avatar-size, 28px);
+  min-width: var(--avatar-size, 28px);
+  border-radius: 999px;
+  border: 1px solid color-mix(in srgb, var(--border) 72%, var(--primary) 28%);
+  background: linear-gradient(180deg, #eff6ff 0%, #dbeafe 100%);
+  color: #1e3a8a;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.74rem;
+  font-weight: 800;
+  overflow: hidden;
+  text-transform: uppercase;
+}
+
+.employee-avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .table-wrap {
@@ -493,20 +524,20 @@ table {
 
 .work-schedule-table th:nth-child(1),
 .work-schedule-table td:nth-child(1) {
-  min-width: 130px;
-  width: 130px;
-}
-
-.work-schedule-table th:nth-child(2),
-.work-schedule-table td:nth-child(2) {
   min-width: 220px;
   width: 220px;
 }
 
+.work-schedule-table th:nth-child(2),
+.work-schedule-table td:nth-child(2) {
+  min-width: 130px;
+  width: 130px;
+}
+
 .work-schedule-table th:nth-child(3),
 .work-schedule-table td:nth-child(3) {
-  min-width: 190px;
-  width: 190px;
+  min-width: 220px;
+  width: 220px;
 }
 
 .work-schedule-table th:nth-child(4),
@@ -540,7 +571,7 @@ table {
 
 .work-schedule-table th:nth-child(2),
 .work-schedule-table td:nth-child(2) {
-  left: 130px;
+  left: 220px;
 }
 
 .work-schedule-table th:nth-child(3),
@@ -550,12 +581,12 @@ table {
 
 .work-schedule-table th:nth-child(4),
 .work-schedule-table td:nth-child(4) {
-  left: 540px;
+  left: 570px;
 }
 
 .work-schedule-table th:nth-child(5),
 .work-schedule-table td:nth-child(5) {
-  left: 660px;
+  left: 690px;
   box-shadow: 2px 0 0 #d9e3f2;
 }
 
@@ -568,6 +599,19 @@ table {
 
 .work-schedule-cell {
   min-width: 182px;
+  white-space: nowrap;
+}
+
+.work-schedule-employee-identity {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 100%;
+}
+
+.work-schedule-employee-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
@@ -668,32 +712,32 @@ tr.row-wfo {
   min-width: 150px;
 }
 
-.table-wrap table th:nth-child(1),
-.table-wrap table td:nth-child(1) {
+.table-wrap table:not(.work-schedule-table) th:nth-child(1),
+.table-wrap table:not(.work-schedule-table) td:nth-child(1) {
   width: 130px;
   min-width: 130px;
 }
 
-.table-wrap table th:nth-child(4),
-.table-wrap table td:nth-child(4) {
+.table-wrap table:not(.work-schedule-table) th:nth-child(4),
+.table-wrap table:not(.work-schedule-table) td:nth-child(4) {
   width: 94px;
   min-width: 94px;
 }
 
-.table-wrap table th:nth-child(5),
-.table-wrap table td:nth-child(5) {
+.table-wrap table:not(.work-schedule-table) th:nth-child(5),
+.table-wrap table:not(.work-schedule-table) td:nth-child(5) {
   width: 118px;
   min-width: 118px;
 }
 
-.table-wrap table th:nth-child(6),
-.table-wrap table td:nth-child(6) {
+.table-wrap table:not(.work-schedule-table) th:nth-child(6),
+.table-wrap table:not(.work-schedule-table) td:nth-child(6) {
   width: 84px;
   min-width: 84px;
 }
 
-.table-wrap table th:nth-child(8),
-.table-wrap table td:nth-child(8) {
+.table-wrap table:not(.work-schedule-table) th:nth-child(8),
+.table-wrap table:not(.work-schedule-table) td:nth-child(8) {
   width: 126px;
   min-width: 126px;
 }
@@ -735,6 +779,17 @@ tr.row-wfo {
 .add-employee-expanded-card {
   max-width: 920px;
   width: min(94vw, 920px);
+}
+
+.add-employee-avatar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.add-employee-avatar-preview {
+  --avatar-size: 56px;
+  font-size: 0.88rem;
 }
 
 .quick-schedule-fullscreen-card {
@@ -836,12 +891,12 @@ tr.row-wfo {
   text-align: center;
 }
 
-.table-wrap table th:nth-child(8),
-.table-wrap table td:nth-child(8),
-.table-wrap table th:nth-child(11),
-.table-wrap table td:nth-child(11),
-.table-wrap table th:nth-child(13),
-.table-wrap table td:nth-child(13) {
+.table-wrap table:not(.work-schedule-table) th:nth-child(8),
+.table-wrap table:not(.work-schedule-table) td:nth-child(8),
+.table-wrap table:not(.work-schedule-table) th:nth-child(11),
+.table-wrap table:not(.work-schedule-table) td:nth-child(11),
+.table-wrap table:not(.work-schedule-table) th:nth-child(13),
+.table-wrap table:not(.work-schedule-table) td:nth-child(13) {
   border-left: 2px solid var(--border);
 }
 
@@ -999,6 +1054,10 @@ tr.row-wfo {
   gap: 14px;
 }
 
+.dashboard-grid>* {
+  min-width: 0;
+}
+
 .dashboard-card .metric {
   display: inline-flex;
   align-items: center;
@@ -1073,6 +1132,12 @@ input[type="color"]::-moz-color-swatch,
   width: 100%;
   height: 260px;
   margin-top: 10px;
+}
+
+.dashboard-insight-compact-wrap,
+.chart-legend,
+.dashboard-accordion-body {
+  min-width: 0;
 }
 
 .chart-segment {
@@ -2193,6 +2258,51 @@ input[type="color"]::-moz-color-swatch,
   border-color: color-mix(in srgb, var(--primary) 30%, var(--border));
 }
 
+.contributor-profile-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 12px;
+  margin-top: 10px;
+  align-items: start;
+}
+
+.contributor-profile-card {
+  border: 1px solid color-mix(in srgb, var(--border) 78%, var(--primary) 22%);
+  border-radius: 14px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  padding: 10px 8px;
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+}
+
+.contributor-profile-avatar {
+  box-shadow: 0 6px 16px rgba(15, 23, 42, 0.12);
+}
+
+.contributor-profile-name-btn {
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text);
+  font-weight: 800;
+  font-size: 0.9rem;
+  line-height: 1.25;
+  cursor: pointer;
+  text-align: center;
+  max-width: 100%;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  border-radius: 10px;
+  padding: 4px 6px;
+}
+
+.contributor-profile-name-btn:hover,
+.contributor-profile-name-btn:focus-visible {
+  border-color: color-mix(in srgb, var(--primary) 40%, var(--border) 60%);
+  background: color-mix(in srgb, var(--primary-soft) 42%, #ffffff 58%);
+  outline: none;
+}
+
 .contributor-metrics-item {
   border: 1px solid var(--border);
   border-radius: 14px;
@@ -2552,6 +2662,13 @@ input[type="color"]::-moz-color-swatch,
 }
 
 @media (max-width: 960px) {
+
+  .work-schedule-table th:nth-child(-n+5),
+  .work-schedule-table td:nth-child(-n+5) {
+    position: static;
+    left: auto;
+    box-shadow: none;
+  }
 
   .report-modal .modal-card {
     grid-template-columns: 1fr;
