@@ -604,6 +604,7 @@ function createEmployee(name = "", defaults = {}) {
         name: `${name || ""}`.trim() || "Unnamed Employee",
         subtrade,
         employeeColor: normalizeEmployeeColor(defaults.employeeColor),
+        profileImage: normalizeEmployeeProfileImage(defaults.profileImage),
         rows: [],
         isHidden: false,
     };
@@ -986,6 +987,7 @@ function normalizeState(saved) {
             jobLevel: `${employee.jobLevel || ""}`.trim(),
             subtrade: typeof employee.subtrade === "string" && employee.subtrade.trim() ? employee.subtrade.trim() : "Uncategorized",
             employeeColor: normalizeEmployeeColor(employee.employeeColor),
+            profileImage: normalizeEmployeeProfileImage(employee.profileImage),
             isHidden: Boolean(employee.isHidden),
             rows: Array.isArray(employee.rows) && employee.rows.length
                 ? employee.rows.map((row) => {
@@ -1053,6 +1055,7 @@ function normalizeState(saved) {
                 jobLevel: `${entry.employee?.jobLevel || ""}`.trim(),
                 subtrade: typeof entry.employee?.subtrade === "string" && entry.employee.subtrade.trim() ? entry.employee.subtrade.trim() : "Uncategorized",
                 employeeColor: normalizeEmployeeColor(entry.employee?.employeeColor),
+                profileImage: normalizeEmployeeProfileImage(entry.employee?.profileImage),
                 isHidden: Boolean(entry.employee?.isHidden),
                 rows: Array.isArray(entry.employee?.rows)
                     ? entry.employee.rows.map((row) => ({
@@ -1305,6 +1308,100 @@ function normalizeSubtradeValue(value) {
 
 function normalizeEmployeeColor(value) {
     return normalizeTaskColor(value) || DEFAULT_EMPLOYEE_COLOR;
+}
+
+function normalizeEmployeeProfileImage(value) {
+    const profileImage = `${value || ""}`.trim();
+    if (!profileImage) {
+        return "";
+    }
+    if (/^data:image\/[a-zA-Z0-9.+-]+;base64,/.test(profileImage)) {
+        return profileImage;
+    }
+    if (/^https?:\/\//i.test(profileImage)) {
+        return profileImage;
+    }
+    return "";
+}
+
+function getEmployeeInitials(name) {
+    const normalizedName = `${name || ""}`.trim();
+    if (!normalizedName) {
+        return "NA";
+    }
+    const parts = normalizedName.split(/\s+/).filter(Boolean);
+    if (parts.length === 1) {
+        return parts[0].slice(0, 2).toUpperCase();
+    }
+    return `${parts[0][0] || ""}${parts[1][0] || ""}`.toUpperCase();
+}
+
+function createEmployeeAvatarElement(employee, options = {}) {
+    const avatar = document.createElement("span");
+    avatar.className = `employee-avatar${options.className ? ` ${options.className}` : ""}`;
+    const size = Number(options.size) || 28;
+    avatar.style.setProperty("--avatar-size", `${size}px`);
+
+    const profileImage = normalizeEmployeeProfileImage(employee?.profileImage);
+    if (profileImage) {
+        const image = document.createElement("img");
+        image.className = "employee-avatar-img";
+        image.src = profileImage;
+        image.alt = `${employee?.name || "Employee"} profile`;
+        avatar.appendChild(image);
+    } else {
+        avatar.textContent = getEmployeeInitials(employee?.name);
+    }
+    return avatar;
+}
+
+function setAddEmployeeTabAvatarPreview(profileImage, employeeName = "") {
+    const preview = document.getElementById("addEmployeeTabAvatarPreview");
+    if (!preview) {
+        return;
+    }
+    preview.innerHTML = "";
+    const normalizedProfileImage = normalizeEmployeeProfileImage(profileImage);
+    preview.classList.remove("has-photo");
+    if (normalizedProfileImage) {
+        const image = document.createElement("img");
+        image.className = "employee-avatar-img";
+        image.src = normalizedProfileImage;
+        image.alt = `${employeeName || "Employee"} profile`;
+        preview.appendChild(image);
+        preview.classList.add("has-photo");
+        return;
+    }
+    preview.textContent = getEmployeeInitials(employeeName);
+}
+
+function onAddEmployeeTabPhotoInputChange(event) {
+    const input = event?.target;
+    const nameInput = document.getElementById("addEmployeeTabNameInput");
+    if (!input) {
+        return;
+    }
+    const file = input.files?.[0];
+    if (!file) {
+        input.dataset.profileImage = "";
+        setAddEmployeeTabAvatarPreview("", nameInput?.value || "");
+        return;
+    }
+    if (!file.type.startsWith("image/")) {
+        window.alert("Please select a valid image file for profile picture.");
+        input.value = "";
+        input.dataset.profileImage = "";
+        setAddEmployeeTabAvatarPreview("", nameInput?.value || "");
+        return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+        const profileImage = normalizeEmployeeProfileImage(`${reader.result || ""}`);
+        input.dataset.profileImage = profileImage;
+        setAddEmployeeTabAvatarPreview(profileImage, nameInput?.value || "");
+    };
+    reader.readAsDataURL(file);
 }
 
 function normalizeTaskColor(value) {
@@ -2001,10 +2098,11 @@ function renderEmployeeNamesSettingsList() {
     const taskOptions = getTaskTargetOptions();
     if (addEmployeeButton) {
         const hasTasks = taskOptions.length > 0;
-        addEmployeeButton.disabled = !hasTasks;
+        // Keep this button clickable like the Work Setup "+" tab action.
+        addEmployeeButton.disabled = false;
         addEmployeeButton.title = hasTasks
-            ? "Add a new employee"
-            : "Please add at least one Task in Task Target Processing Time first.";
+            ? "Add employee"
+            : "Add employee (requires at least one Task first).";
     }
     employeeList.innerHTML = "";
     if (employeeMeta) {
@@ -2170,7 +2268,8 @@ function openAddEmployeeTabModal() {
     const jobLevelInput = document.getElementById("addEmployeeTabJobLevelInput");
     const subtradeInput = document.getElementById("addEmployeeTabSubtradeInput");
     const colorInput = document.getElementById("addEmployeeTabColorInput");
-    if (!modal || !employeeIdInput || !employeeEmailInput || !input || !jobLevelInput || !subtradeInput || !colorInput) {
+    const photoInput = document.getElementById("addEmployeeTabPhotoInput");
+    if (!modal || !employeeIdInput || !employeeEmailInput || !input || !jobLevelInput || !subtradeInput || !colorInput || !photoInput) {
         return;
     }
 
@@ -2193,6 +2292,9 @@ function openAddEmployeeTabModal() {
     });
     subtradeInput.value = taskOptions[0];
     colorInput.value = DEFAULT_EMPLOYEE_COLOR;
+    photoInput.value = "";
+    photoInput.dataset.profileImage = "";
+    setAddEmployeeTabAvatarPreview("", "");
     setAddEmployeeTabFeedback("Enter employee name and select a task.");
     modal.classList.remove("hidden");
     modal.setAttribute("aria-hidden", "false");
@@ -2207,6 +2309,7 @@ function closeAddEmployeeTabModal() {
     const jobLevelInput = document.getElementById("addEmployeeTabJobLevelInput");
     const subtradeInput = document.getElementById("addEmployeeTabSubtradeInput");
     const colorInput = document.getElementById("addEmployeeTabColorInput");
+    const photoInput = document.getElementById("addEmployeeTabPhotoInput");
     if (employeeIdInput) {
         employeeIdInput.value = "";
     }
@@ -2225,6 +2328,11 @@ function closeAddEmployeeTabModal() {
     if (colorInput) {
         colorInput.value = DEFAULT_EMPLOYEE_COLOR;
     }
+    if (photoInput) {
+        photoInput.value = "";
+        photoInput.dataset.profileImage = "";
+    }
+    setAddEmployeeTabAvatarPreview("", "");
     setAddEmployeeTabFeedback("Enter employee name and select a task.");
     if (!modal) {
         return;
@@ -2243,7 +2351,8 @@ function confirmAddEmployeeFromTabs() {
     const jobLevelInput = document.getElementById("addEmployeeTabJobLevelInput");
     const subtradeInput = document.getElementById("addEmployeeTabSubtradeInput");
     const colorInput = document.getElementById("addEmployeeTabColorInput");
-    if (!employeeIdInput || !employeeEmailInput || !input || !jobLevelInput || !subtradeInput || !colorInput) {
+    const photoInput = document.getElementById("addEmployeeTabPhotoInput");
+    if (!employeeIdInput || !employeeEmailInput || !input || !jobLevelInput || !subtradeInput || !colorInput || !photoInput) {
         return;
     }
     if (!getTaskTargetOptions().length) {
@@ -2256,6 +2365,7 @@ function confirmAddEmployeeFromTabs() {
     const jobLevel = jobLevelInput.value.trim();
     const subtrade = subtradeInput.value.trim();
     const employeeColor = normalizeEmployeeColor(colorInput.value);
+    const profileImage = normalizeEmployeeProfileImage(photoInput.dataset.profileImage || "");
     if (!name) {
         setAddEmployeeTabFeedback("Employee name is required.", "error");
         input.focus();
@@ -2266,7 +2376,7 @@ function confirmAddEmployeeFromTabs() {
         subtradeInput.focus();
         return;
     }
-    const newEmployee = createEmployee(name, { employeeCode, employeeEmail, jobLevel, subtrade, employeeColor });
+    const newEmployee = createEmployee(name, { employeeCode, employeeEmail, jobLevel, subtrade, employeeColor, profileImage });
     state.employees.push(newEmployee);
     activeTab = newEmployee.id;
     saveState();
@@ -3314,9 +3424,9 @@ function renderWorkScheduleTable() {
 
     const dateValues = getWorkScheduleDateValues();
     const staticHeaders = [
+        "Employee",
         "Employee ID",
         "Employee Email Address",
-        "Employee Name",
         "Job Level",
         "Task",
     ];
@@ -3359,14 +3469,23 @@ function renderWorkScheduleTable() {
     employees.forEach((employee) => {
         const tr = document.createElement("tr");
         [
+            employee.name,
             `${employee.employeeCode || ""}`.trim(),
             `${employee.employeeEmail || ""}`.trim(),
-            employee.name,
             `${employee.jobLevel || ""}`.trim(),
             employee.subtrade || "Uncategorized",
         ].forEach((value, index) => {
             const td = document.createElement("td");
-            if (index === 4) {
+            if (index === 0) {
+                const identityWrap = document.createElement("div");
+                identityWrap.className = "work-schedule-employee-identity";
+                identityWrap.appendChild(createEmployeeAvatarElement(employee, { size: 30, className: "work-schedule-employee-avatar" }));
+                const nameText = document.createElement("span");
+                nameText.className = "work-schedule-employee-name";
+                nameText.textContent = value;
+                identityWrap.appendChild(nameText);
+                td.appendChild(identityWrap);
+            } else if (index === 4) {
                 const taskPill = document.createElement("span");
                 taskPill.className = "cell-pill";
                 taskPill.textContent = value;
@@ -5979,7 +6098,11 @@ function renderTabs() {
             button.style.color = getReadableTextColor(employeeColor);
         }
 
+        const avatar = createEmployeeAvatarElement(employee, { size: 24, className: "tab-employee-avatar" });
+        button.appendChild(avatar);
+
         const label = document.createElement("span");
+        label.className = "tab-employee-name";
         label.textContent = employee.name;
         button.appendChild(label);
 
@@ -6548,12 +6671,23 @@ function buildSelectedContributorOverviewSeries() {
 function createChartMarkup(series, chartStyle) {
     const total = Math.max(1, series.reduce((sum, entry) => sum + entry.value, 0));
     if (chartStyle === "bar") {
+        const toCompactLabel = (label) => {
+            const value = `${label || ""}`.trim();
+            if (value.length <= 8) {
+                return value;
+            }
+            const words = value.split(/\s+/).filter(Boolean);
+            if (words.length > 1) {
+                return words.map((word) => word[0] || "").join("").slice(0, 3).toUpperCase();
+            }
+            return `${value.slice(0, 7)}...`;
+        };
         const maxValue = Math.max(...series.map((entry) => entry.value), 1);
         return `<svg class="chart-svg" viewBox="0 0 380 220" role="img" aria-label="Bar graph">${series.map((entry, index) => {
             const height = (entry.value / maxValue) * 140;
             const x = 30 + index * 70;
             const y = 190 - height;
-            return `<g><rect class="chart-segment" x="${x}" y="${y}" width="40" height="${height}" fill="${entry.color}" rx="8"><title>${entry.label}: ${entry.value}</title></rect><text x="${x + 20}" y="205" text-anchor="middle" font-size="11" fill="#172033">${entry.label}</text><text x="${x + 20}" y="${y - 8}" text-anchor="middle" font-size="11" fill="#172033">${entry.value}</text></g>`;
+            return `<g><rect class="chart-segment" x="${x}" y="${y}" width="40" height="${height}" fill="${entry.color}" rx="8"><title>${entry.label}: ${entry.value}</title></rect><text x="${x + 20}" y="205" text-anchor="middle" font-size="11" fill="#172033">${toCompactLabel(entry.label)}</text><text x="${x + 20}" y="${y - 8}" text-anchor="middle" font-size="11" fill="#172033">${entry.value}</text></g>`;
         }).join("")}</svg>`;
     }
 
@@ -6564,7 +6698,9 @@ function createChartMarkup(series, chartStyle) {
         const segment = (entry.value / total) * circumference;
         const dash = `${segment} ${circumference - segment}`;
         const percentage = Math.round((entry.value / total) * 100);
-        return `<circle class="chart-segment" cx="110" cy="110" r="${radius}" fill="none" stroke="${entry.color}" stroke-width="34" stroke-dasharray="${dash}" stroke-dashoffset="-${offset}" transform="rotate(-90 110 110)"><title>${entry.label}: ${entry.value} (${percentage}%)</title></circle>`;
+        const node = `<circle class="chart-segment" cx="110" cy="110" r="${radius}" fill="none" stroke="${entry.color}" stroke-width="34" stroke-dasharray="${dash}" stroke-dashoffset="-${offset}" transform="rotate(-90 110 110)"><title>${entry.label}: ${entry.value} (${percentage}%)</title></circle>`;
+        offset += segment;
+        return node;
     });
     return `<svg class="chart-svg" viewBox="0 0 250 220" role="img" aria-label="Pie chart"><circle cx="110" cy="110" r="70" fill="none" stroke="#e5e7eb" stroke-width="34"></circle>${slices.join("")}<text x="110" y="106" text-anchor="middle" font-size="16" font-weight="700" fill="#172033">${total}</text><text x="110" y="126" text-anchor="middle" font-size="12" fill="#61708a">entries</text></svg>`;
 }
@@ -6918,21 +7054,24 @@ function renderDashboard() {
                 }
 
                 const list = document.createElement("div");
-                list.className = `contributor-name-list dashboard-section-scroll${dashboardSectionMaximized.contributorMetrics ? " is-maximized" : ""}`;
+                list.className = `contributor-profile-grid dashboard-section-scroll${dashboardSectionMaximized.contributorMetrics ? " is-maximized" : ""}`;
 
                 metrics.forEach((entry) => {
-                    const headerButton = document.createElement("button");
-                    headerButton.type = "button";
-                    headerButton.className = "contributor-name-btn";
-                    headerButton.textContent = entry.employee.name;
-                    const employeeColor = normalizeEmployeeColor(entry.employee.employeeColor);
-                    headerButton.style.background = employeeColor;
-                    headerButton.style.color = getReadableTextColor(employeeColor);
-                    headerButton.style.borderColor = employeeColor;
-                    headerButton.addEventListener("click", () => {
+                    const card = document.createElement("div");
+                    card.className = "contributor-profile-card";
+                    card.appendChild(createEmployeeAvatarElement(entry.employee, { size: 66, className: "contributor-profile-avatar" }));
+
+                    const nameButton = document.createElement("button");
+                    nameButton.type = "button";
+                    nameButton.className = "contributor-profile-name-btn";
+                    nameButton.textContent = entry.employee.name;
+                    nameButton.title = `Open ${entry.employee.name} dashboard`;
+                    nameButton.addEventListener("click", () => {
                         openContributorDashboardModal(entry.employee.id);
                     });
-                    list.appendChild(headerButton);
+
+                    card.appendChild(nameButton);
+                    list.appendChild(card);
                 });
 
                 body.appendChild(list);
@@ -7403,10 +7542,7 @@ function hardResetAllData() {
 }
 
 function addEmployee() {
-    if (!requireLoggedInUser()) {
-        return;
-    }
-    openAddEmployeeTabModal();
+    addEmployeeFromTabs();
 }
 
 function setWorkShiftFeedback(message, tone = "info") {
@@ -8451,8 +8587,141 @@ function setupPasswordVisibilityToggles() {
     });
 }
 
+const TABLE_CELL_FOCUSABLE_SELECTOR = [
+    "input:not([type='hidden']):not([disabled])",
+    "select:not([disabled])",
+    "textarea:not([disabled])",
+    "button:not([disabled])",
+    "[tabindex]:not([tabindex='-1'])",
+].join(", ");
+
+function getFocusableElementsFromCell(cell) {
+    if (!cell) {
+        return [];
+    }
+    return Array.from(cell.querySelectorAll(TABLE_CELL_FOCUSABLE_SELECTOR))
+        .filter((element) => element instanceof HTMLElement)
+        .filter((element) => !element.hidden && element.offsetParent !== null);
+}
+
+function focusTableCellControl(cell, currentElement = null) {
+    const focusables = getFocusableElementsFromCell(cell);
+    if (!focusables.length) {
+        return false;
+    }
+
+    let nextTarget = focusables[0];
+    if (currentElement) {
+        const preferred = focusables.find((element) => {
+            if (element.tagName !== currentElement.tagName) {
+                return false;
+            }
+            if (element.tagName === "INPUT") {
+                return (element.type || "text") === (currentElement.type || "text");
+            }
+            return true;
+        });
+        if (preferred) {
+            nextTarget = preferred;
+        }
+    }
+
+    nextTarget.focus();
+    return true;
+}
+
+function moveTableFocusVertically(row, cellIndex, direction, currentElement) {
+    const section = row?.parentElement;
+    if (!section) {
+        return false;
+    }
+    const rows = Array.from(section.querySelectorAll("tr"));
+    const rowIndex = rows.indexOf(row);
+    if (rowIndex < 0) {
+        return false;
+    }
+
+    for (let cursor = rowIndex + direction; cursor >= 0 && cursor < rows.length; cursor += direction) {
+        const candidateRow = rows[cursor];
+        const candidateCell = candidateRow?.cells?.[cellIndex] || null;
+        if (focusTableCellControl(candidateCell, currentElement)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function moveTableFocusHorizontally(row, cellIndex, direction, currentElement) {
+    const cells = Array.from(row?.cells || []);
+    if (!cells.length) {
+        return false;
+    }
+    for (let cursor = cellIndex + direction; cursor >= 0 && cursor < cells.length; cursor += direction) {
+        if (focusTableCellControl(cells[cursor], currentElement)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function setupTableArrowNavigation() {
+    document.addEventListener("keydown", (event) => {
+        const key = event.key;
+        if (!["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(key)) {
+            return;
+        }
+        if (event.altKey || event.ctrlKey || event.metaKey) {
+            return;
+        }
+
+        const target = event.target;
+        if (!(target instanceof HTMLElement) || target.isContentEditable) {
+            return;
+        }
+
+        const cell = target.closest("td");
+        if (!cell) {
+            return;
+        }
+        const row = cell.closest("tr");
+        const section = row?.parentElement;
+        if (!row || !section) {
+            return;
+        }
+
+        const isWorkSetupBody = section.id === "scheduleBody";
+        const isWorkScheduleBody = section.id === "workScheduleBody";
+        if (!isWorkSetupBody && !isWorkScheduleBody) {
+            return;
+        }
+
+        const cells = Array.from(row.cells || []);
+        const cellIndex = cells.indexOf(cell);
+        if (cellIndex < 0) {
+            return;
+        }
+
+        let moved = false;
+        if (key === "ArrowUp") {
+            moved = moveTableFocusVertically(row, cellIndex, -1, target);
+        } else if (key === "ArrowDown") {
+            moved = moveTableFocusVertically(row, cellIndex, 1, target);
+        } else if (key === "ArrowLeft") {
+            moved = moveTableFocusHorizontally(row, cellIndex, -1, target);
+        } else if (key === "ArrowRight") {
+            moved = moveTableFocusHorizontally(row, cellIndex, 1, target);
+        }
+
+        if (moved) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+    });
+}
+
 function setupEvents() {
     setupPasswordVisibilityToggles();
+    setupTableArrowNavigation();
     document.getElementById("settingsBtn").addEventListener("click", openSettings);
     document.getElementById("authShortcutBtn").addEventListener("click", () => {
         openAuthModal();
@@ -8504,7 +8773,7 @@ function setupEvents() {
     document.getElementById("clearManualCreditFiltersBtn").addEventListener("click", clearManualCreditLogFilters);
     document.getElementById("addSubtradeTargetBtn").addEventListener("click", addSubtradeProcessingTarget);
     document.getElementById("cancelSubtradeTargetEditBtn").addEventListener("click", cancelSubtradeTargetEdit);
-    document.getElementById("addEmployeeBtn").addEventListener("click", addEmployee);
+    document.getElementById("addEmployeeBtn").addEventListener("click", addEmployeeFromTabs);
     document.getElementById("signUpBtn").addEventListener("click", signUpUser);
     document.getElementById("logInBtn").addEventListener("click", logInUser);
     document.getElementById("logOutBtn").addEventListener("click", logOutUser);
@@ -8566,6 +8835,11 @@ function setupEvents() {
             confirmAddEmployeeFromTabs();
         }
     });
+    document.getElementById("addEmployeeTabNameInput").addEventListener("input", (event) => {
+        const photoInput = document.getElementById("addEmployeeTabPhotoInput");
+        setAddEmployeeTabAvatarPreview(photoInput?.dataset.profileImage || "", event.target.value || "");
+    });
+    document.getElementById("addEmployeeTabPhotoInput").addEventListener("change", onAddEmployeeTabPhotoInputChange);
     document.getElementById("subtradeTargetNameInput").addEventListener("keydown", (event) => {
         if (event.key === "Enter") {
             event.preventDefault();
