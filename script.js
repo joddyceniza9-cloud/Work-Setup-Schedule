@@ -667,6 +667,7 @@ function createDefaultState() {
 function createDefaultAuthState() {
     return {
         currentUserId: "",
+        delegatedFromAdminUserId: "",
         legacyMigrated: false,
         users: [createAdminAccount()],
     };
@@ -884,6 +885,9 @@ function normalizeAuthState(saved) {
 
     return {
         currentUserId,
+        delegatedFromAdminUserId: users.some((user) => user.id === saved?.delegatedFromAdminUserId)
+            ? saved.delegatedFromAdminUserId
+            : "",
         legacyMigrated: Boolean(saved?.legacyMigrated),
         users,
     };
@@ -4938,7 +4942,12 @@ function renderHeader() {
         : "User: none";
     if (returnAdminButton) {
         const adminUser = auth.users.find((user) => isAdminUser(user));
-        const shouldShowReturnAdmin = Boolean(currentUser && !isAdminUser(currentUser) && adminUser);
+        const shouldShowReturnAdmin = Boolean(
+            currentUser
+            && !isAdminUser(currentUser)
+            && adminUser
+            && auth.delegatedFromAdminUserId === currentUser.id,
+        );
         returnAdminButton.hidden = !shouldShowReturnAdmin;
         returnAdminButton.classList.toggle("hidden", !shouldShowReturnAdmin);
         returnAdminButton.disabled = !shouldShowReturnAdmin;
@@ -5395,13 +5404,15 @@ function renderAdminAccountTabModal() {
 
 function openSelectedAccountFromTab() {
     const user = auth.users.find((entry) => entry.id === selectedAdminAccountId);
+    const currentUser = getCurrentUser();
     if (!user) {
         return;
     }
-    if (user.id === getCurrentUser()?.id) {
+    if (user.id === currentUser?.id) {
         return;
     }
-    applyLogin(user);
+    const delegatedFromAdmin = Boolean(currentUser && isAdminUser(currentUser) && !isAdminUser(user));
+    applyLogin(user, { delegatedFromAdmin });
     closeAllSettingsWindows();
     render();
 }
@@ -5727,8 +5738,10 @@ function syncAuthUI() {
     }
 }
 
-function applyLogin(user) {
+function applyLogin(user, options = {}) {
+    const delegatedFromAdmin = Boolean(options.delegatedFromAdmin);
     auth.currentUserId = user.id;
+    auth.delegatedFromAdminUserId = delegatedFromAdmin ? user.id : "";
     saveAuthState();
     state = loadState();
     activeTab = "all";
@@ -5824,6 +5837,9 @@ function logOutUser() {
 }
 
 function returnToAdminAccount() {
+    if (!auth.delegatedFromAdminUserId) {
+        return;
+    }
     const adminUser = auth.users.find((user) => isAdminUser(user));
     if (!adminUser) {
         return;
