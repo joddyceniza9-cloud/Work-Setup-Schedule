@@ -770,6 +770,11 @@ tr.row-wfo {
   justify-content: flex-start;
 }
 
+.employee-names-settings-card #employeeSettingsList {
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
 #employeeSettingsMeta {
   margin: 6px 2px 10px;
   font-weight: 600;
@@ -1775,6 +1780,12 @@ input[type="color"]::-moz-color-swatch,
   gap: 12px;
 }
 
+.manual-credit-employee-list {
+  max-height: 220px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
 .manual-credit-scope-note {
   margin: 2px 0 10px;
   padding: 10px 12px;
@@ -1952,7 +1963,12 @@ input[type="color"]::-moz-color-swatch,
 }
 
 .employee-settings-list {
-  overflow: visible;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  overflow: auto;
+  flex: 1 1 auto;
+  min-height: 0;
   padding: 10px 8px 8px;
   border: 1px solid color-mix(in srgb, var(--border) 82%, var(--primary) 18%);
   border-radius: 14px;
@@ -1960,8 +1976,63 @@ input[type="color"]::-moz-color-swatch,
 }
 
 .employee-settings-list.scroll-active {
-  max-height: 430px;
-  overflow: auto;
+  max-height: none;
+}
+
+.employee-settings-head {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 12px;
+  align-items: end;
+  padding: 2px 10px 8px;
+  margin: 0 0 2px;
+}
+
+.employee-settings-head-fields {
+  display: grid;
+  grid-template-columns: minmax(210px, 1.35fr) minmax(150px, 0.9fr) minmax(250px, 1.55fr) minmax(150px, 0.9fr) minmax(190px, 1.05fr) 60px;
+  gap: 10px;
+}
+
+.employee-settings-head-label,
+.employee-settings-head-actions {
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--muted) 84%, var(--text) 16%);
+  white-space: nowrap;
+}
+
+.employee-settings-head-actions {
+  width: 172px;
+  min-width: 172px;
+  text-align: center;
+}
+
+.employee-settings-head-label:nth-child(6) {
+  text-align: center;
+}
+
+.employee-names-settings-card .settings-row-actions {
+  width: 172px;
+  min-width: 172px;
+  justify-content: flex-end;
+}
+
+.employee-name-field {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.employee-name-field .input-field {
+  min-width: 0;
+}
+
+.employee-settings-avatar {
+  --avatar-size: 34px;
 }
 
 @media (max-width: 1500px) {
@@ -1969,9 +2040,24 @@ input[type="color"]::-moz-color-swatch,
     grid-template-columns: repeat(3, minmax(180px, 1fr));
   }
 
+  .employee-settings-head-fields {
+    grid-template-columns: repeat(3, minmax(180px, 1fr));
+  }
+
   .employee-names-settings-card .settings-row-actions {
     min-width: 0;
     justify-content: flex-start;
+  }
+
+  .employee-settings-head-actions {
+    min-width: 0;
+    text-align: left;
+    width: auto;
+  }
+
+  .employee-names-settings-card .settings-row-actions {
+    width: auto;
+    min-width: 0;
   }
 }
 
