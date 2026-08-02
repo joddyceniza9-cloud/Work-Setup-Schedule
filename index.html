@@ -56,6 +56,7 @@
           <select id="subtradeFilter"></select>
         </label>
         <div id="currentUserPill" class="filter-pill user-pill">User: none</div>
+        <button id="returnAdminBtn" class="secondary-btn hidden" type="button">Return to Administrator</button>
         <button id="authShortcutBtn" class="secondary-btn" aria-label="Manage account access">Log In</button>
         <button id="settingsBtn" class="primary-btn fb-settings-btn" aria-label="Open settings">⚙ Settings</button>
       </div>
@@ -535,6 +536,24 @@
       <p class="help-text">Open the scope window to view what this planner tracks and the main workflows per view.</p>
       <div class="auth-actions">
         <button id="viewScopeBtn" class="secondary-btn" type="button">Open Scope Info</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="adminAccountTabModal" class="modal hidden settings-detail-modal" aria-hidden="true">
+    <div class="modal-card settings-detail-card compact-modal-card admin-account-tab-card">
+      <div class="modal-header">
+        <div>
+          <h2 id="adminAccountTabTitle">Account Tab</h2>
+          <p id="adminAccountTabSubtitle" class="help-text settings-status">Open an account from the Administrator
+            panel.</p>
+        </div>
+        <button id="closeAdminAccountTabBtn" class="secondary-btn" type="button">Close</button>
+      </div>
+      <div id="adminAccountTabContent" class="admin-account-tab-content"></div>
+      <div class="auth-actions">
+        <button id="openSelectedAccountBtn" class="primary-btn" type="button">Switch to This Account</button>
+        <button id="deleteSelectedAccountBtn" class="danger-btn" type="button">Delete Account</button>
       </div>
     </div>
   </div>
