@@ -346,14 +346,6 @@
           </div>
         </div>
 
-        <div class="settings-list settings-nav-row" data-target-modal="workScheduleDatesSettingsModal" role="button"
-          tabindex="0" aria-label="Open Work Schedule Dates settings">
-          <div class="settings-list-header">
-            <h3>Work Schedule Dates</h3>
-            <span aria-hidden="true">›</span>
-          </div>
-        </div>
-
         <div class="settings-list settings-nav-row" data-target-modal="hardResetSettingsModal" role="button"
           tabindex="0" aria-label="Open Hard Reset settings">
           <div class="settings-list-header">
@@ -569,6 +561,17 @@
           title="Add employee">Add</button>
       </div>
       <p id="employeeSettingsMeta" class="help-text">Added Employees: 0</p>
+      <div id="employeeSettingsHeader" class="employee-settings-head">
+        <div class="employee-settings-head-fields">
+          <span class="employee-settings-head-label">Name</span>
+          <span class="employee-settings-head-label">Employee ID</span>
+          <span class="employee-settings-head-label">Email</span>
+          <span class="employee-settings-head-label">Job Level</span>
+          <span class="employee-settings-head-label">Task</span>
+          <span class="employee-settings-head-label">Color</span>
+        </div>
+        <div class="employee-settings-head-actions">Actions</div>
+      </div>
       <div id="employeeSettingsList" class="employee-settings-list"></div>
     </div>
   </div>
@@ -595,32 +598,6 @@
       <p id="workShiftFeedback" class="help-text auth-feedback">Add Shift Name and Schedule pairs available per day.
       </p>
       <div id="workShiftList" class="subtrade-target-list"></div>
-    </div>
-  </div>
-
-  <div id="workScheduleDatesSettingsModal" class="modal hidden settings-detail-modal" aria-hidden="true">
-    <div class="modal-card settings-detail-card compact-modal-card">
-      <div class="modal-header">
-        <h2>Work Schedule Dates</h2>
-        <button id="closeWorkScheduleDatesSettingsBtn" class="secondary-btn" type="button">Close</button>
-      </div>
-      <p class="help-text">Add month and day entries even if the date is not yet present in Work Setup.</p>
-      <div class="manual-credit-grid">
-        <label class="field compact">
-          <span>Month</span>
-          <select id="workScheduleMonthInput" class="select-field"></select>
-        </label>
-        <label class="field compact">
-          <span>Day</span>
-          <select id="workScheduleDayInput" class="select-field"></select>
-        </label>
-      </div>
-      <div class="auth-actions">
-        <button id="addWorkScheduleDateBtn" class="secondary-btn" type="button">Add Date</button>
-      </div>
-      <p id="workScheduleDateFeedback" class="help-text auth-feedback">Dates added here are shown in Work Schedule
-        columns.</p>
-      <div id="workScheduleDateList" class="subtrade-target-list"></div>
     </div>
   </div>
 
@@ -795,10 +772,14 @@
       <div class="settings-scroll-area">
         <div class="settings-list">
           <div class="manual-credit-grid">
-            <label class="field">
-              <span>Specific Employee</span>
-              <select id="manualCreditEmployeeSelect" class="select-field"></select>
-            </label>
+            <div class="field">
+              <span>Specific Employee (multiple)</span>
+              <label class="checkbox-row">
+                <input id="manualCreditEmployeeSelectAll" type="checkbox" />
+                <span>Select all employees</span>
+              </label>
+              <div id="manualCreditEmployeeList" class="selection-grid manual-credit-employee-list"></div>
+            </div>
             <label class="field">
               <span>Manual WFH Credit Occurrences Required in a Week</span>
               <input id="manualCreditOccurrenceInput" class="input-field" type="number" min="1" placeholder="e.g. 2" />
