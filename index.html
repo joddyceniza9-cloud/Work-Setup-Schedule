@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Work Setup Schedule</title>
+  <title>Work Arrangement</title>
   <link rel="stylesheet" href="styles.css" />
 </head>
 
@@ -14,7 +14,7 @@
       <div class="topbar-left">
         <button id="menuBtn" class="icon-btn menu-btn" aria-label="Open navigation">☰</button>
         <div>
-          <h1 id="headerTitle">Work Setup Schedule</h1>
+          <h1 id="headerTitle">Work Arrangement</h1>
           <p id="headerMeta" class="header-meta">No user logged in</p>
         </div>
       </div>
@@ -62,7 +62,8 @@
     </header>
 
     <nav id="sideNav" class="side-nav hidden" aria-label="Section navigation">
-      <button class="nav-link active" data-view="schedule">Schedule</button>
+      <button class="nav-link active" data-view="schedule">Work Setup</button>
+      <button class="nav-link" data-view="workSchedule">Work Schedule</button>
       <button class="nav-link" data-view="summary">WFO Summary</button>
       <button class="nav-link" data-view="credits">WFH Credits</button>
       <button class="nav-link" data-view="dashboard">Dashboard</button>
@@ -92,12 +93,13 @@
                 <th>Task</th>
                 <th>Employee</th>
                 <th>Week</th>
+                <th>Year</th>
                 <th>Month</th>
                 <th>Date</th>
                 <th>Day</th>
                 <th>Processing Time</th>
                 <th>Accuracy</th>
-                <th>Unapproved Leave</th>
+                <th>Leave Type</th>
                 <th>Work Setup</th>
                 <th>WFO Waive</th>
                 <th>Change Schedule Month</th>
@@ -106,6 +108,39 @@
               </tr>
             </thead>
             <tbody id="scheduleBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section id="workScheduleView" class="view-panel">
+      <div class="table-card">
+        <div class="table-actions">
+          <div class="table-title">
+            <h2>Work Schedule</h2>
+            <p>Daily work shifts per employee based on selected filters and configured date library.</p>
+          </div>
+          <div class="table-actions-right">
+            <div class="work-schedule-zoom-controls" aria-label="Work Schedule zoom controls">
+              <button id="workScheduleZoomOutBtn" class="secondary-btn" type="button" title="Zoom Out">-</button>
+              <span id="workScheduleZoomLabel" class="zoom-label">100%</span>
+              <button id="workScheduleZoomInBtn" class="secondary-btn" type="button" title="Zoom In">+</button>
+            </div>
+            <button id="addQuickScheduleBtn" class="primary-btn" type="button">Add Quick Schedule</button>
+          </div>
+        </div>
+        <div class="table-wrap work-schedule-wrap">
+          <table class="work-schedule-table">
+            <thead>
+              <tr id="workScheduleHeadRow">
+                <th>Employee ID</th>
+                <th>Employee Email Address</th>
+                <th>Employee Name</th>
+                <th>Job Level</th>
+                <th>Task</th>
+              </tr>
+            </thead>
+            <tbody id="workScheduleBody"></tbody>
           </table>
         </div>
       </div>
@@ -140,7 +175,7 @@
         <div class="table-actions">
           <div class="table-title">
             <h2>Dashboard</h2>
-            <p>Monitoring view for off-target rows, accuracy issues, and unapproved leave.</p>
+            <p>Monitoring view for off-target rows, accuracy issues, and leave type.</p>
           </div>
           <div class="topbar-controls">
             <label class="filter-pill">
@@ -221,7 +256,11 @@
         </label>
         <label class="field">
           <span>Password</span>
-          <input id="authPasswordInput" class="input-field" type="password" placeholder="Enter password" />
+          <div class="password-input-wrap">
+            <input id="authPasswordInput" class="input-field" type="password" placeholder="Enter password" />
+            <button class="password-toggle-btn" type="button" data-password-target="authPasswordInput"
+              aria-label="Show password" aria-pressed="false" title="Show password">👁</button>
+          </div>
         </label>
       </div>
       <div class="auth-actions">
@@ -298,6 +337,22 @@
           </div>
         </div>
 
+        <div class="settings-list settings-nav-row" data-target-modal="workShiftSettingsModal" role="button"
+          tabindex="0" aria-label="Open Work Shift settings">
+          <div class="settings-list-header">
+            <h3>Work Shift</h3>
+            <span aria-hidden="true">›</span>
+          </div>
+        </div>
+
+        <div class="settings-list settings-nav-row" data-target-modal="workScheduleDatesSettingsModal" role="button"
+          tabindex="0" aria-label="Open Work Schedule Dates settings">
+          <div class="settings-list-header">
+            <h3>Work Schedule Dates</h3>
+            <span aria-hidden="true">›</span>
+          </div>
+        </div>
+
         <div class="settings-list settings-nav-row" data-target-modal="hardResetSettingsModal" role="button"
           tabindex="0" aria-label="Open Hard Reset settings">
           <div class="settings-list-header">
@@ -329,7 +384,11 @@
             </label>
             <label class="field">
               <span>Password</span>
-              <input id="accountPasswordInput" class="input-field" type="password" placeholder="Enter password" />
+              <div class="password-input-wrap">
+                <input id="accountPasswordInput" class="input-field" type="password" placeholder="Enter password" />
+                <button class="password-toggle-btn" type="button" data-password-target="accountPasswordInput"
+                  aria-label="Show password" aria-pressed="false" title="Show password">👁</button>
+              </div>
             </label>
           </div>
           <div class="auth-actions">
@@ -417,7 +476,7 @@
                 placeholder="e.g. 2" />
             </label>
             <fieldset class="field compact leave-count-fieldset">
-              <legend><span class="target-label"><span class="target-label-badge">LVC</span><span>Count leave toward WFH
+              <legend><span class="target-label"><span class="target-label-badge">LVC</span><span>Count Leave Toward WFH
                     Credit</span></span></legend>
               <div class="leave-count-grid">
                 <label class="leave-count-item"><input id="subtradeTargetCountLeaveOFFInput" type="checkbox"
@@ -430,6 +489,10 @@
                     value="TL" />TL</label>
                 <label class="leave-count-item"><input id="subtradeTargetCountLeaveVLInput" type="checkbox"
                     value="VL" />VL</label>
+                <label class="leave-count-item"><input id="subtradeTargetCountLeavePHInput" type="checkbox"
+                    value="PH" />PH - Philippine Holiday</label>
+                <label class="leave-count-item"><input id="subtradeTargetCountLeaveTHInput" type="checkbox"
+                    value="TH" />TH - Trade Holiday</label>
               </div>
             </fieldset>
             <label class="field compact">
@@ -477,7 +540,7 @@
   </div>
 
   <div id="employeeNamesSettingsModal" class="modal hidden settings-detail-modal" aria-hidden="true">
-    <div class="modal-card settings-detail-card">
+    <div class="modal-card settings-detail-card employee-names-settings-card">
       <div class="modal-header">
         <h2>Employee Names</h2>
         <button id="closeEmployeeNamesSettingsBtn" class="secondary-btn" type="button">Close</button>
@@ -486,7 +549,59 @@
         <button id="addEmployeeBtn" class="secondary-btn" type="button" aria-label="Add employee"
           title="Add employee">Add</button>
       </div>
+      <p id="employeeSettingsMeta" class="help-text">Added Employees: 0</p>
       <div id="employeeSettingsList" class="employee-settings-list"></div>
+    </div>
+  </div>
+
+  <div id="workShiftSettingsModal" class="modal hidden settings-detail-modal" aria-hidden="true">
+    <div class="modal-card settings-detail-card compact-modal-card">
+      <div class="modal-header">
+        <h2>Work Shift</h2>
+        <button id="closeWorkShiftSettingsBtn" class="secondary-btn" type="button">Close</button>
+      </div>
+      <div class="manual-credit-grid">
+        <label class="field">
+          <span>Shift Name</span>
+          <input id="workShiftNameInput" class="input-field" type="text" placeholder="e.g. Graveyard Shift" />
+        </label>
+        <label class="field">
+          <span>Schedule</span>
+          <input id="workShiftScheduleInput" class="input-field" type="text" placeholder="e.g. 10:00 PM - 7:00 AM" />
+        </label>
+        <div class="auth-actions">
+          <button id="addWorkShiftBtn" class="secondary-btn" type="button">Add Shift</button>
+        </div>
+      </div>
+      <p id="workShiftFeedback" class="help-text auth-feedback">Add Shift Name and Schedule pairs available per day.
+      </p>
+      <div id="workShiftList" class="subtrade-target-list"></div>
+    </div>
+  </div>
+
+  <div id="workScheduleDatesSettingsModal" class="modal hidden settings-detail-modal" aria-hidden="true">
+    <div class="modal-card settings-detail-card compact-modal-card">
+      <div class="modal-header">
+        <h2>Work Schedule Dates</h2>
+        <button id="closeWorkScheduleDatesSettingsBtn" class="secondary-btn" type="button">Close</button>
+      </div>
+      <p class="help-text">Add month and day entries even if the date is not yet present in Work Setup.</p>
+      <div class="manual-credit-grid">
+        <label class="field compact">
+          <span>Month</span>
+          <select id="workScheduleMonthInput" class="select-field"></select>
+        </label>
+        <label class="field compact">
+          <span>Day</span>
+          <select id="workScheduleDayInput" class="select-field"></select>
+        </label>
+      </div>
+      <div class="auth-actions">
+        <button id="addWorkScheduleDateBtn" class="secondary-btn" type="button">Add Date</button>
+      </div>
+      <p id="workScheduleDateFeedback" class="help-text auth-feedback">Dates added here are shown in Work Schedule
+        columns.</p>
+      <div id="workScheduleDateList" class="subtrade-target-list"></div>
     </div>
   </div>
 
@@ -512,7 +627,11 @@
       <p id="hardResetPasswordPrompt" class="help-text">Enter the account password to confirm deletion.</p>
       <label class="field">
         <span>Confirm Password</span>
-        <input id="hardResetPasswordInput" class="input-field" type="password" placeholder="Enter password" />
+        <div class="password-input-wrap">
+          <input id="hardResetPasswordInput" class="input-field" type="password" placeholder="Enter password" />
+          <button class="password-toggle-btn" type="button" data-password-target="hardResetPasswordInput"
+            aria-label="Show password" aria-pressed="false" title="Show password">👁</button>
+        </div>
       </label>
       <p id="hardResetPasswordFeedback" class="help-text auth-feedback">Enter the account password to confirm deletion.
       </p>
@@ -523,14 +642,28 @@
   </div>
 
   <div id="addEmployeeTabModal" class="modal hidden settings-detail-modal" aria-hidden="true">
-    <div class="modal-card settings-detail-card compact-modal-card">
+    <div class="modal-card settings-detail-card add-employee-expanded-card">
       <div class="modal-header">
         <h2>Add Employee</h2>
         <button id="cancelAddEmployeeTabBtn" class="secondary-btn" type="button">Cancel</button>
       </div>
+      <div class="manual-credit-grid">
+        <label class="field">
+          <span>Employee ID</span>
+          <input id="addEmployeeTabIdInput" class="input-field" type="text" placeholder="Enter employee ID" />
+        </label>
+        <label class="field">
+          <span>Employee Email Address</span>
+          <input id="addEmployeeTabEmailInput" class="input-field" type="email" placeholder="name@example.com" />
+        </label>
+      </div>
       <label class="field">
         <span>Employee Name</span>
         <input id="addEmployeeTabNameInput" class="input-field" type="text" placeholder="Enter employee name" />
+      </label>
+      <label class="field">
+        <span>Job Level</span>
+        <input id="addEmployeeTabJobLevelInput" class="input-field" type="text" placeholder="Enter job level" />
       </label>
       <label class="field">
         <span>Task</span>
@@ -543,6 +676,86 @@
       <p id="addEmployeeTabFeedback" class="help-text auth-feedback">Type a name to create a new employee tab.</p>
       <div class="auth-actions">
         <button id="confirmAddEmployeeTabBtn" class="primary-btn" type="button">Add Employee</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="quickScheduleModal" class="modal hidden settings-detail-modal" aria-hidden="true">
+    <div class="modal-card settings-detail-card quick-schedule-fullscreen-card">
+      <div class="modal-header">
+        <h2>Add Quick Schedule</h2>
+        <button id="closeQuickScheduleBtn" class="secondary-btn" type="button">Close</button>
+      </div>
+      <div class="settings-scroll-area">
+        <div class="settings-list">
+          <div class="manual-credit-grid">
+            <div class="field">
+              <span>Employees</span>
+              <div id="quickScheduleEmployeeList" class="selection-grid"></div>
+            </div>
+            <label class="field">
+              <span>Work Shift</span>
+              <select id="quickScheduleShiftSelect" class="select-field"></select>
+            </label>
+            <label class="field">
+              <span>Leave Type</span>
+              <select id="quickScheduleLeaveSelect" class="select-field"></select>
+              <div class="quick-schedule-leave-controls">
+                <button id="openQuickScheduleLeaveLegendBtn" class="secondary-btn" type="button">Leave Type Color
+                  Legend</button>
+                <label class="checkbox-row quick-schedule-halfday-row">
+                  <input id="quickScheduleHalfDayCheckbox" type="checkbox" />
+                  <span>Half Day</span>
+                </label>
+              </div>
+            </label>
+          </div>
+          <div class="manual-credit-grid">
+            <div class="field">
+              <span>Year(s)</span>
+              <select id="quickScheduleYearSelect" class="select-field" multiple></select>
+            </div>
+            <div class="field">
+              <span>Month(s)</span>
+              <div id="quickScheduleMonthList" class="selection-grid"></div>
+            </div>
+            <div class="field">
+              <span>Week(s)</span>
+              <div id="quickScheduleWeekList" class="selection-grid"></div>
+            </div>
+            <div class="field">
+              <span>Day(s)</span>
+              <div id="quickScheduleDayList" class="selection-grid"></div>
+            </div>
+          </div>
+          <p id="quickScheduleFeedback" class="help-text auth-feedback">Select employees, shift, and target dates to
+            apply.</p>
+          <div class="auth-actions">
+            <button id="applyQuickScheduleBtn" class="primary-btn" type="button">Apply Quick Schedule</button>
+          </div>
+        </div>
+
+        <div class="settings-list">
+          <div class="settings-list-header">
+            <h3>Quick Schedule Logs</h3>
+          </div>
+          <div id="quickScheduleLogsList" class="manual-credit-log-list"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="quickScheduleLeaveLegendModal" class="modal hidden settings-detail-modal" aria-hidden="true">
+    <div class="modal-card settings-detail-card quick-schedule-legend-card">
+      <div class="modal-header">
+        <h2>Leave Type Color Legend</h2>
+        <button id="closeQuickScheduleLeaveLegendBtn" class="secondary-btn" type="button">Close</button>
+      </div>
+      <div class="settings-scroll-area">
+        <div class="settings-list">
+          <p class="help-text">Edit leave colors below. These colors will reflect exactly in Work Schedule cells.</p>
+          <div id="quickScheduleLeaveLegendModalList" class="quick-schedule-leave-legend legend-modal-list"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -698,6 +911,16 @@
     </div>
   </div>
 
+  <div id="workScheduleInsightDetailsModal" class="modal hidden" aria-hidden="true">
+    <div class="modal-card scope-card insight-details-modal-card">
+      <div class="modal-header">
+        <h2 id="workScheduleInsightDetailsTitle">Work Schedule Insight Details</h2>
+        <button id="closeWorkScheduleInsightDetailsBtn" class="secondary-btn" type="button">Close</button>
+      </div>
+      <div id="workScheduleInsightDetailsContent" class="dashboard-grid"></div>
+    </div>
+  </div>
+
   <div id="reportModal" class="modal hidden report-modal" aria-hidden="true">
     <div class="modal-card">
       <div class="modal-header">
@@ -730,6 +953,8 @@
         <div id="reportPreviewContent" class="report-preview-list"></div>
       </div>
       <div class="report-actions">
+        <button id="previewWorkSetupBtn" class="primary-btn">Work Setup</button>
+        <button id="previewWorkScheduleBtn" class="secondary-btn">Work Schedule</button>
         <button id="downloadReportBtn" class="primary-btn">Download CSV</button>
       </div>
     </div>
@@ -766,12 +991,33 @@
       <p id="deleteAccountPrompt" class="help-text">Enter the account password to confirm deletion.</p>
       <label class="field">
         <span>Confirm Password</span>
-        <input id="deleteAccountPasswordInput" class="input-field" type="password" placeholder="Enter password" />
+        <div class="password-input-wrap">
+          <input id="deleteAccountPasswordInput" class="input-field" type="password" placeholder="Enter password" />
+          <button class="password-toggle-btn" type="button" data-password-target="deleteAccountPasswordInput"
+            aria-label="Show password" aria-pressed="false" title="Show password">👁</button>
+        </div>
       </label>
       <p id="deleteAccountFeedback" class="help-text auth-feedback">Deleting an account also removes its saved schedule
         data from this browser.</p>
       <div class="auth-actions">
         <button id="confirmDeleteAccountBtn" class="danger-btn" type="button">Delete Account</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="addYearModal" class="modal hidden" aria-hidden="true">
+    <div class="modal-card compact-modal-card">
+      <div class="modal-header">
+        <h2>Add Year</h2>
+        <button id="cancelAddYearBtn" class="secondary-btn" type="button">Cancel</button>
+      </div>
+      <label class="field">
+        <span>Year</span>
+        <input id="addYearInput" class="input-field" type="number" min="2026" placeholder="Enter year" />
+      </label>
+      <p id="addYearFeedback" class="help-text auth-feedback">Enter a year (2026 or later).</p>
+      <div class="auth-actions">
+        <button id="confirmAddYearBtn" class="primary-btn" type="button">Add Year</button>
       </div>
     </div>
   </div>
