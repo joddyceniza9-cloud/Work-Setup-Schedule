@@ -477,6 +477,7 @@ const SETTINGS_DETAIL_MODAL_IDS = [
     "subtradeTargetsSettingsModal",
     "quickGuideSettingsModal",
     "viewScopeSettingsModal",
+    "adminAccountTabModal",
     "employeeNamesSettingsModal",
     "workShiftSettingsModal",
     "workScheduleDatesSettingsModal",
@@ -496,6 +497,7 @@ let manualWfoPendingRowId = "";
 let manualWfhPendingEmployeeId = "";
 let manualWfhPendingRowId = "";
 let reportPreviewMode = "workSetup";
+let selectedAdminAccountId = "";
 const WFH_CREDIT_LEAVE_OPTIONS = ["OFF", "ML", "PL", "TL", "VL", "PH", "TH"];
 const WFH_UNAPPROVED_LEAVE_VALUES = new Set(WFH_CREDIT_LEAVE_OPTIONS);
 const DASHBOARD_METRIC_DEFINITIONS = [
@@ -4927,12 +4929,23 @@ function renderHeader() {
     document.getElementById("headerTitle").textContent = state.headerName;
     const currentUser = getCurrentUser();
     const authShortcutButton = document.getElementById("authShortcutBtn");
+    const returnAdminButton = document.getElementById("returnAdminBtn");
     document.getElementById("headerMeta").textContent = currentUser
         ? `Signed in as ${currentUser.username}`
         : "No user logged in";
     document.getElementById("currentUserPill").textContent = currentUser
         ? `User: ${currentUser.username}`
         : "User: none";
+    if (returnAdminButton) {
+        const adminUser = auth.users.find((user) => isAdminUser(user));
+        const shouldShowReturnAdmin = Boolean(currentUser && !isAdminUser(currentUser) && adminUser);
+        returnAdminButton.hidden = !shouldShowReturnAdmin;
+        returnAdminButton.classList.toggle("hidden", !shouldShowReturnAdmin);
+        returnAdminButton.disabled = !shouldShowReturnAdmin;
+        returnAdminButton.textContent = shouldShowReturnAdmin
+            ? `Return to ${adminUser.username}`
+            : "Return to Administrator";
+    }
     authShortcutButton.textContent = currentUser ? "Logged In" : "Log In";
     authShortcutButton.disabled = Boolean(currentUser);
 }
@@ -5215,7 +5228,19 @@ function renderAdminAccountList() {
         const row = document.createElement("div");
         const isTopEmployees = employeeCount > 0 && employeeCount === highestEmployeeCount;
         const isTopRows = rowCount > 0 && rowCount === highestRowCount;
-        row.className = `account-row admin-account-row${isTopEmployees || isTopRows ? " admin-account-row-highlight" : ""}`;
+        row.className = `account-row admin-account-row${isTopEmployees || isTopRows ? " admin-account-row-highlight" : ""} admin-account-row-clickable`;
+        row.tabIndex = 0;
+        row.setAttribute("role", "button");
+        row.setAttribute("aria-label", `Open account ${user.username}`);
+        row.addEventListener("click", () => {
+            openAccountTab(user.id);
+        });
+        row.addEventListener("keydown", (event) => {
+            if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                openAccountTab(user.id);
+            }
+        });
 
         const info = document.createElement("div");
         info.className = "account-info";
@@ -5225,6 +5250,13 @@ function renderAdminAccountList() {
 
         const name = document.createElement("strong");
         name.textContent = user.username;
+        name.className = "admin-account-name";
+        name.title = `Open ${user.username}`;
+        name.tabIndex = -1;
+        name.addEventListener("click", (event) => {
+            event.stopPropagation();
+            openAccountTab(user.id);
+        });
 
         const role = document.createElement("span");
         role.className = `role-chip ${user.role === "admin" ? "admin" : "user"}`;
@@ -5293,6 +5325,97 @@ function renderAdminAccountList() {
         row.appendChild(info);
         list.appendChild(row);
     });
+}
+
+function openAccountTab(userId) {
+    selectedAdminAccountId = userId;
+    renderAdminAccountTabModal();
+    openSettings();
+    openSettingsDetailModal("adminAccountTabModal");
+}
+
+function renderAdminAccountTabModal() {
+    const modal = document.getElementById("adminAccountTabModal");
+    const title = document.getElementById("adminAccountTabTitle");
+    const subtitle = document.getElementById("adminAccountTabSubtitle");
+    const content = document.getElementById("adminAccountTabContent");
+    const openButton = document.getElementById("openSelectedAccountBtn");
+    const deleteButton = document.getElementById("deleteSelectedAccountBtn");
+    if (!modal || !title || !subtitle || !content || !openButton || !deleteButton) {
+        return;
+    }
+
+    const currentUser = getCurrentUser();
+    const user = auth.users.find((entry) => entry.id === selectedAdminAccountId) || null;
+    if (!user) {
+        title.textContent = "Account Tab";
+        subtitle.textContent = "Select an account to open its tab.";
+        content.innerHTML = "";
+        openButton.disabled = true;
+        deleteButton.disabled = true;
+        return;
+    }
+
+    const userState = loadStateForUserId(user.id);
+    title.textContent = `${user.username} Account Tab`;
+    subtitle.textContent = user.id === currentUser?.id
+        ? "This is the currently active account."
+        : "Administrator can review, switch to, or delete this account without leaving the admin session.";
+    content.innerHTML = "";
+
+    const detailGrid = document.createElement("div");
+    detailGrid.className = "admin-account-tab-grid";
+    [
+        { label: "Username", value: user.username || "(empty)" },
+        { label: "Role", value: isAdminUser(user) ? "Administrator" : "Standard User" },
+        { label: "Password", value: user.password || "(empty)" },
+        { label: "Header Name", value: userState.headerName || "Work Arrangement" },
+        { label: "Task Targets", value: String((userState.subtradeProcessingTargets || []).length) },
+        { label: "Employees", value: String((userState.employees || []).length) },
+        { label: "Schedule Rows", value: String((userState.employees || []).reduce((sum, employee) => sum + (employee.rows || []).length, 0)) },
+        { label: "Last Updated", value: formatTimestamp(user.updatedAt || userState.lastUpdatedAt) },
+    ].forEach((entry) => {
+        const item = document.createElement("div");
+        item.className = "admin-account-tab-item";
+        const label = document.createElement("span");
+        label.className = "admin-account-tab-label";
+        label.textContent = entry.label;
+        const value = document.createElement("strong");
+        value.className = "admin-account-tab-value";
+        value.textContent = entry.value;
+        item.appendChild(label);
+        item.appendChild(value);
+        detailGrid.appendChild(item);
+    });
+    content.appendChild(detailGrid);
+
+    openButton.disabled = Boolean(user.id === currentUser?.id);
+    deleteButton.disabled = isAdminUser(user);
+}
+
+function openSelectedAccountFromTab() {
+    const user = auth.users.find((entry) => entry.id === selectedAdminAccountId);
+    if (!user) {
+        return;
+    }
+    if (user.id === getCurrentUser()?.id) {
+        return;
+    }
+    applyLogin(user);
+    closeAllSettingsWindows();
+    render();
+}
+
+function deleteSelectedAccountFromTab() {
+    const user = auth.users.find((entry) => entry.id === selectedAdminAccountId);
+    if (!user) {
+        return;
+    }
+    if (isAdminUser(user)) {
+        return;
+    }
+    closeSettingsDetailModal("adminAccountTabModal");
+    openDeleteAccountModal(user.id);
 }
 
 function clearAdminSearch() {
@@ -5375,7 +5498,9 @@ function positionGuideCard(target, step = null) {
     const viewportHeight = window.innerHeight;
     const margin = 20;
     const cardWidth = Math.min(380, viewportWidth - (margin * 2));
-    const cardHeight = 260;
+    guideCard.style.width = `${cardWidth}px`;
+    const measuredHeight = guideCard.scrollHeight || guideCard.getBoundingClientRect().height || 260;
+    const cardHeight = Math.min(measuredHeight, viewportHeight - (margin * 2));
     const spaces = {
         bottom: viewportHeight - rect.bottom,
         top: rect.top,
@@ -5426,7 +5551,6 @@ function positionGuideCard(target, step = null) {
     left = Math.max(margin, Math.min(left, viewportWidth - cardWidth - margin));
 
     guideCard.dataset.placement = placement;
-    guideCard.style.width = `${cardWidth}px`;
     guideCard.style.top = `${top}px`;
     guideCard.style.left = `${left}px`;
 }
@@ -5697,6 +5821,15 @@ function logOutUser() {
     closeAllSettingsWindows();
     openAuthModal();
     render();
+}
+
+function returnToAdminAccount() {
+    const adminUser = auth.users.find((user) => isAdminUser(user));
+    if (!adminUser) {
+        return;
+    }
+    closeAllSettingsWindows();
+    applyLogin(adminUser);
 }
 
 function updateCurrentAccount() {
@@ -7469,6 +7602,16 @@ function closeSettingsDetailModal(modalId) {
     modal.setAttribute("aria-hidden", "true");
 }
 
+function returnToActiveAccountSettings() {
+    closeSettingsDetailModal("adminAccountTabModal");
+    const activeAccountModal = document.getElementById("activeAccountSettingsModal");
+    if (!activeAccountModal) {
+        return;
+    }
+    activeAccountModal.classList.remove("hidden");
+    activeAccountModal.setAttribute("aria-hidden", "false");
+}
+
 function closeSettingsDetailModals() {
     SETTINGS_DETAIL_MODAL_IDS.forEach((modalId) => {
         closeSettingsDetailModal(modalId);
@@ -8774,6 +8917,10 @@ function setupEvents() {
     document.getElementById("addSubtradeTargetBtn").addEventListener("click", addSubtradeProcessingTarget);
     document.getElementById("cancelSubtradeTargetEditBtn").addEventListener("click", cancelSubtradeTargetEdit);
     document.getElementById("addEmployeeBtn").addEventListener("click", addEmployeeFromTabs);
+    document.getElementById("returnAdminBtn").addEventListener("click", returnToAdminAccount);
+    document.getElementById("openSelectedAccountBtn").addEventListener("click", openSelectedAccountFromTab);
+    document.getElementById("deleteSelectedAccountBtn").addEventListener("click", deleteSelectedAccountFromTab);
+    document.getElementById("closeAdminAccountTabBtn").addEventListener("click", returnToActiveAccountSettings);
     document.getElementById("signUpBtn").addEventListener("click", signUpUser);
     document.getElementById("logInBtn").addEventListener("click", logInUser);
     document.getElementById("logOutBtn").addEventListener("click", logOutUser);
