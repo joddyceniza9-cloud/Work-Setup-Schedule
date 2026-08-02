@@ -4750,7 +4750,9 @@ function getEmployeeCreditBalance(employee) {
         return 0;
     }
 
-    getFilteredRows(employee).forEach((row) => {
+    const allRows = Array.isArray(employee?.rows) ? employee.rows : [];
+
+    allRows.forEach((row) => {
         if (!row.dateValue || row.creditUsed || row.wfoWave === "Use WFH Credit") {
             return;
         }
@@ -4774,7 +4776,7 @@ function getEmployeeCreditBalance(employee) {
         }
         return sum + Math.floor(entry.count / target);
     }, 0);
-    const used = getFilteredRows(employee).filter((row) => row.creditUsed).length;
+    const used = allRows.filter((row) => row.creditUsed).length;
     return earned - used;
 }
 
@@ -4783,8 +4785,9 @@ function reconcileUsedCreditsAfterEligibilityChange(employee) {
         return [];
     }
 
+    const allRows = Array.isArray(employee?.rows) ? employee.rows : [];
     const weeklyGroups = {};
-    getFilteredRows(employee).forEach((row) => {
+    allRows.forEach((row) => {
         if (!row.dateValue || row.creditUsed || row.wfoWave === "Use WFH Credit") {
             return;
         }
@@ -4809,7 +4812,7 @@ function reconcileUsedCreditsAfterEligibilityChange(employee) {
         return sum + Math.floor(entry.count / target);
     }, 0);
 
-    const usedRows = getFilteredRows(employee)
+    const usedRows = allRows
         .filter((row) => row.creditUsed || row.wfoWave === "Use WFH Credit")
         .sort((left, right) => parseDateValue(right.dateValue) - parseDateValue(left.dateValue));
 
