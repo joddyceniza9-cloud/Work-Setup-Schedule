@@ -480,7 +480,6 @@ const SETTINGS_DETAIL_MODAL_IDS = [
     "adminAccountTabModal",
     "employeeNamesSettingsModal",
     "workShiftSettingsModal",
-    "workScheduleDatesSettingsModal",
     "hardResetSettingsModal",
     "addEmployeeTabModal",
     "manualWfhCreditOptionsModal",
@@ -588,6 +587,8 @@ function createRow(dateValue, defaults = {}) {
         manualWfoRemarks: "",
         manualWfh: false,
         manualWfhRemarks: "",
+        workSetupRemoved: false,
+        workSetupRemovalBackup: null,
         manualOverrideBackup: null,
         notes: "",
         generatedByRowId: "",
@@ -659,6 +660,7 @@ function createDefaultState() {
             employees: [],
             manualCreditRules: [],
             taskTargets: [],
+            quickScheduleLogs: [],
         },
         employees: [],
     };
@@ -1015,6 +1017,28 @@ function normalizeState(saved) {
                         manualWfoRemarks: typeof row.manualWfoRemarks === "string" ? row.manualWfoRemarks : "",
                         manualWfh: Boolean(row.manualWfh),
                         manualWfhRemarks: typeof row.manualWfhRemarks === "string" ? row.manualWfhRemarks : "",
+                        workSetupRemoved: Boolean(row.workSetupRemoved),
+                        workSetupRemovalBackup: row.workSetupRemovalBackup && typeof row.workSetupRemovalBackup === "object"
+                            ? {
+                                processingTime: typeof row.workSetupRemovalBackup.processingTime === "string" ? row.workSetupRemovalBackup.processingTime : "",
+                                accuracy: typeof row.workSetupRemovalBackup.accuracy === "string" ? row.workSetupRemovalBackup.accuracy : "",
+                                unapprovedLeave: typeof row.workSetupRemovalBackup.unapprovedLeave === "string" ? row.workSetupRemovalBackup.unapprovedLeave : "",
+                                unapprovedLeaveHalfDay: Boolean(row.workSetupRemovalBackup.unapprovedLeaveHalfDay),
+                                wfoWave: typeof row.workSetupRemovalBackup.wfoWave === "string" ? row.workSetupRemovalBackup.wfoWave : "",
+                                creditUsed: Boolean(row.workSetupRemovalBackup.creditUsed),
+                                changeScheduleMonth: typeof row.workSetupRemovalBackup.changeScheduleMonth === "string" ? row.workSetupRemovalBackup.changeScheduleMonth : "",
+                                changeScheduleDate: typeof row.workSetupRemovalBackup.changeScheduleDate === "string" ? row.workSetupRemovalBackup.changeScheduleDate : "",
+                                workSetup: typeof row.workSetupRemovalBackup.workSetup === "string" ? row.workSetupRemovalBackup.workSetup : "",
+                                wfoDone: Boolean(row.workSetupRemovalBackup.wfoDone),
+                                manualWfo: Boolean(row.workSetupRemovalBackup.manualWfo),
+                                manualWfoRemarks: typeof row.workSetupRemovalBackup.manualWfoRemarks === "string" ? row.workSetupRemovalBackup.manualWfoRemarks : "",
+                                manualWfh: Boolean(row.workSetupRemovalBackup.manualWfh),
+                                manualWfhRemarks: typeof row.workSetupRemovalBackup.manualWfhRemarks === "string" ? row.workSetupRemovalBackup.manualWfhRemarks : "",
+                                manualOverrideBackup: row.workSetupRemovalBackup.manualOverrideBackup && typeof row.workSetupRemovalBackup.manualOverrideBackup === "object"
+                                    ? cloneState(row.workSetupRemovalBackup.manualOverrideBackup)
+                                    : null,
+                            }
+                            : null,
                         manualOverrideBackup: row.manualOverrideBackup && typeof row.manualOverrideBackup === "object"
                             ? {
                                 wfoWave: typeof row.manualOverrideBackup.wfoWave === "string" ? row.manualOverrideBackup.wfoWave : "",
@@ -1114,6 +1138,29 @@ function normalizeState(saved) {
                 createdAt: typeof entry.target?.createdAt === "string" ? entry.target.createdAt : new Date().toISOString(),
             },
         })).filter((entry) => entry.target.subtrade)
+        : [];
+
+    const deletedQuickScheduleLogs = Array.isArray(saved.deleted?.quickScheduleLogs)
+        ? saved.deleted.quickScheduleLogs
+            .map((entry) => ({
+                id: entry.id || createId(),
+                deletedAt: entry.deletedAt || new Date().toISOString(),
+                log: {
+                    id: entry.log?.id || createId(),
+                    createdAt: typeof entry.log?.createdAt === "string" ? entry.log.createdAt : new Date().toISOString(),
+                    employeeIds: Array.from(new Set((Array.isArray(entry.log?.employeeIds) ? entry.log.employeeIds : [])
+                        .map((value) => `${value || ""}`.trim())
+                        .filter((value) => Boolean(value)))),
+                    dateValues: Array.from(new Set((Array.isArray(entry.log?.dateValues) ? entry.log.dateValues : [])
+                        .map((value) => `${value || ""}`.trim())
+                        .filter((value) => /^\d{4}-\d{2}-\d{2}$/.test(value)))),
+                    shiftName: `${entry.log?.shiftName || ""}`.trim(),
+                    workShift: `${entry.log?.workShift || ""}`.trim(),
+                    unapprovedLeave: `${entry.log?.unapprovedLeave || ""}`.trim(),
+                    unapprovedLeaveHalfDay: Boolean(entry.log?.unapprovedLeaveHalfDay),
+                },
+            }))
+            .filter((entry) => entry.log.employeeIds.length && entry.log.dateValues.length)
         : [];
 
     const normalizedSelectedMonths = Array.isArray(saved.selectedMonths)
@@ -1226,6 +1273,36 @@ function normalizeState(saved) {
             .filter((entry) => entry.employeeIds.length && entry.dateValues.length)
         : [];
 
+    const legacyDeletedQuickScheduleLogs = quickScheduleLogs
+        .filter((entry) => entry.deleted)
+        .map((entry) => ({
+            id: createId(),
+            deletedAt: entry.createdAt || new Date().toISOString(),
+            log: {
+                id: entry.id,
+                createdAt: entry.createdAt,
+                employeeIds: entry.employeeIds,
+                dateValues: entry.dateValues,
+                shiftName: entry.shiftName,
+                workShift: entry.workShift,
+                unapprovedLeave: entry.unapprovedLeave,
+                unapprovedLeaveHalfDay: entry.unapprovedLeaveHalfDay,
+            },
+        }));
+
+    const quickScheduleLogsActive = quickScheduleLogs.filter((entry) => !entry.deleted);
+    const mergedDeletedQuickScheduleLogs = (() => {
+        const byLogId = new Map();
+        [...deletedQuickScheduleLogs, ...legacyDeletedQuickScheduleLogs].forEach((entry) => {
+            const key = `${entry.log?.id || ""}`;
+            if (!key || byLogId.has(key)) {
+                return;
+            }
+            byLogId.set(key, entry);
+        });
+        return Array.from(byLogId.values());
+    })();
+
     const selectedSubtrade = typeof saved.selectedSubtrade === "string" && saved.selectedSubtrade.trim()
         ? saved.selectedSubtrade.trim()
         : fallback.selectedSubtrade;
@@ -1271,7 +1348,7 @@ function normalizeState(saved) {
             : (workShiftOptions.length ? workShiftOptions : cloneWorkShiftOptions(DEFAULT_WORK_SHIFT_OPTIONS)),
         workScheduleDates,
         workScheduleAssignments,
-        quickScheduleLogs,
+        quickScheduleLogs: quickScheduleLogsActive,
         lastUpdatedAt: typeof saved.lastUpdatedAt === "string" ? saved.lastUpdatedAt : fallback.lastUpdatedAt,
         selectedYear: Math.max(2026, Number(saved.selectedYear) || fallback.selectedYear),
         addedYears,
@@ -1301,6 +1378,7 @@ function normalizeState(saved) {
             employees: deletedEmployees,
             manualCreditRules: deletedManualCreditRules,
             taskTargets: deletedTaskTargets,
+            quickScheduleLogs: mergedDeletedQuickScheduleLogs,
         },
         employees,
     };
@@ -1785,6 +1863,15 @@ function getRememberedWeeksForMonths(months) {
     return Array.isArray(remembered) ? remembered : [];
 }
 
+function hasRememberedWeeksForMonths(months) {
+    const key = getMonthSelectionKey(months);
+    return Boolean(
+        state.rememberedWeeksByMonthKey
+        && typeof state.rememberedWeeksByMonthKey === "object"
+        && Object.prototype.hasOwnProperty.call(state.rememberedWeeksByMonthKey, key),
+    );
+}
+
 function rememberWeeksForMonths(months, weeks) {
     const key = getMonthSelectionKey(months);
     if (!key) {
@@ -1899,9 +1986,19 @@ function includeDateInActiveFilters(dateValue) {
         return;
     }
     const date = parseDateValue(dateValue);
-    const selectedYear = Number(state.selectedYear) || 2026;
-    if (date.getFullYear() !== selectedYear) {
+    if (Number.isNaN(date.getTime())) {
         return;
+    }
+
+    const selectedYear = date.getFullYear();
+    state.selectedYear = selectedYear;
+
+    state.addedYears = Array.isArray(state.addedYears)
+        ? state.addedYears.map((value) => Number(value)).filter((value) => Number.isFinite(value) && value >= 2026)
+        : [];
+    if (selectedYear >= 2026 && !state.addedYears.includes(selectedYear)) {
+        state.addedYears.push(selectedYear);
+        state.addedYears.sort((left, right) => left - right);
     }
 
     const monthValue = date.getMonth() + 1;
@@ -1912,6 +2009,9 @@ function includeDateInActiveFilters(dateValue) {
         selectedMonths.push(monthValue);
         selectedMonths.sort((left, right) => left - right);
         state.selectedMonths = selectedMonths;
+    }
+    if (!state.selectedMonth || !state.selectedMonths.includes(Number(state.selectedMonth))) {
+        state.selectedMonth = monthValue;
     }
 
     const availableWeeks = getAvailableWeekValues(selectedYear, state.selectedMonths);
@@ -1929,11 +2029,26 @@ function includeDateInActiveFilters(dateValue) {
     const selectedDays = Array.isArray(state.selectedDays)
         ? state.selectedDays.map((value) => `${value || ""}`.trim()).filter((value) => Boolean(value))
         : [];
-    if (availableDays.includes(dateValue) && !selectedDays.includes(dateValue)) {
+    if (!selectedDays.includes(dateValue)) {
         selectedDays.push(dateValue);
-        selectedDays.sort((left, right) => parseDateValue(left) - parseDateValue(right));
     }
-    state.selectedDays = selectedDays.filter((value) => availableDays.includes(value));
+    const normalizedSelectedDays = selectedDays.filter((value) => availableDays.includes(value) || value === dateValue);
+    normalizedSelectedDays.sort((left, right) => parseDateValue(left) - parseDateValue(right));
+    state.selectedDays = Array.from(new Set(normalizedSelectedDays));
+}
+
+function replaceDateInActiveFilters(previousDateValue, nextDateValue) {
+    if (!nextDateValue) {
+        return;
+    }
+    const previous = `${previousDateValue || ""}`.trim();
+    if (previous) {
+        const selectedDays = Array.isArray(state.selectedDays)
+            ? state.selectedDays.map((value) => `${value || ""}`.trim()).filter((value) => Boolean(value))
+            : [];
+        state.selectedDays = selectedDays.filter((value) => value !== previous);
+    }
+    includeDateInActiveFilters(nextDateValue);
 }
 
 function formatDayFilterLabel(dateValue) {
@@ -2016,6 +2131,7 @@ function restoreDeletedEmployee(trashEmployeeId) {
         employeeEmail: `${record.employee.employeeEmail || ""}`.trim(),
         jobLevel: `${record.employee.jobLevel || ""}`.trim(),
         subtrade: typeof record.employee.subtrade === "string" && record.employee.subtrade.trim() ? record.employee.subtrade.trim() : "Uncategorized",
+        profileImage: normalizeEmployeeProfileImage(record.employee.profileImage),
         isHidden: false,
         rows: Array.isArray(record.employee.rows)
             ? record.employee.rows.map((row) => ({
@@ -2028,6 +2144,61 @@ function restoreDeletedEmployee(trashEmployeeId) {
 
     state.employees.push(restored);
     state.deleted.employees.splice(index, 1);
+    saveState();
+    render();
+}
+
+function restoreDeletedQuickScheduleLog(trashLogId) {
+    const list = state.deleted?.quickScheduleLogs || [];
+    const index = list.findIndex((entry) => entry.id === trashLogId);
+    if (index < 0) {
+        return;
+    }
+    const record = list[index];
+    const log = record.log || null;
+    if (!log) {
+        return;
+    }
+
+    const restoredLog = {
+        id: log.id || createId(),
+        createdAt: log.createdAt || new Date().toISOString(),
+        employeeIds: Array.isArray(log.employeeIds) ? [...log.employeeIds] : [],
+        dateValues: Array.isArray(log.dateValues) ? [...log.dateValues] : [],
+        shiftName: `${log.shiftName || ""}`.trim(),
+        workShift: `${log.workShift || ""}`.trim(),
+        unapprovedLeave: `${log.unapprovedLeave || ""}`.trim(),
+        unapprovedLeaveHalfDay: Boolean(log.unapprovedLeaveHalfDay),
+        deleted: false,
+    };
+
+    restoredLog.employeeIds.forEach((employeeId) => {
+        restoredLog.dateValues.forEach((dateValue) => {
+            upsertWorkScheduleAssignment(employeeId, dateValue, {
+                shiftName: restoredLog.shiftName,
+                workShift: restoredLog.workShift,
+                unapprovedLeave: restoredLog.unapprovedLeave,
+                unapprovedLeaveHalfDay: Boolean(restoredLog.unapprovedLeaveHalfDay),
+                source: "quick",
+                quickLogId: restoredLog.id,
+            });
+            syncSetupLeaveFromWorkSchedule(employeeId, dateValue, restoredLog.unapprovedLeave, Boolean(restoredLog.unapprovedLeaveHalfDay));
+        });
+    });
+
+    state.quickScheduleLogs = Array.isArray(state.quickScheduleLogs) ? state.quickScheduleLogs : [];
+    if (!state.quickScheduleLogs.some((entry) => entry.id === restoredLog.id)) {
+        state.quickScheduleLogs.unshift(restoredLog);
+    }
+    list.splice(index, 1);
+    saveState();
+    render();
+    renderQuickScheduleLogs();
+}
+
+function deleteQuickScheduleLogForever(trashLogId) {
+    state.deleted = state.deleted || {};
+    state.deleted.quickScheduleLogs = (state.deleted.quickScheduleLogs || []).filter((entry) => entry.id !== trashLogId);
     saveState();
     render();
 }
@@ -2115,12 +2286,18 @@ function renderEmployeeNamesSettingsList() {
         employeeMeta.textContent = `Added Employees: ${state.employees.length}`;
     }
     employeeList.classList.toggle("scroll-active", state.employees.length > 5);
+
     state.employees.forEach((employee) => {
         const row = document.createElement("div");
         row.className = "settings-row";
 
         const fields = document.createElement("div");
         fields.className = "settings-row-fields";
+
+        const nameField = document.createElement("div");
+        nameField.className = "employee-name-field";
+
+        const avatar = createEmployeeAvatarElement(employee, { size: 34, className: "employee-settings-avatar" });
 
         const nameInput = document.createElement("input");
         nameInput.className = "input-field";
@@ -2133,9 +2310,15 @@ function renderEmployeeNamesSettingsList() {
             const targetEmployee = state.employees.find((entry) => entry.id === employee.id);
             if (targetEmployee) {
                 targetEmployee.name = event.target.value.trim() || "Unnamed Employee";
+                if (!normalizeEmployeeProfileImage(targetEmployee.profileImage)) {
+                    avatar.textContent = getEmployeeInitials(targetEmployee.name);
+                }
                 renderTabs();
             }
         });
+
+        nameField.appendChild(avatar);
+        nameField.appendChild(nameInput);
 
         const employeeIdInput = document.createElement("input");
         employeeIdInput.className = "input-field";
@@ -2215,7 +2398,7 @@ function renderEmployeeNamesSettingsList() {
             }
         });
 
-        fields.appendChild(nameInput);
+        fields.appendChild(nameField);
         fields.appendChild(employeeIdInput);
         fields.appendChild(employeeEmailInput);
         fields.appendChild(jobLevelInput);
@@ -2239,7 +2422,6 @@ function renderEmployeeNamesSettingsList() {
         deleteButton.textContent = "Remove";
         deleteButton.addEventListener("click", () => {
             deleteEmployee(employee.id);
-            openSettingsDetailModal("employeeNamesSettingsModal");
         });
 
         actionGroup.appendChild(toggleVisibilityButton);
@@ -2773,21 +2955,58 @@ function getCheckedValuesFromList(containerId, castToNumber = false) {
 }
 
 function renderManualCreditEmployeeSelect() {
-    const select = document.getElementById("manualCreditEmployeeSelect");
-    if (!select) {
+    const list = document.getElementById("manualCreditEmployeeList");
+    const selectAll = document.getElementById("manualCreditEmployeeSelectAll");
+    if (!list || !selectAll) {
         return;
     }
-    const previousValue = select.value;
-    select.innerHTML = "";
+    const previousValues = new Set(Array.from(list.querySelectorAll("input:checked")).map((input) => input.value));
+    list.innerHTML = "";
     state.employees.forEach((employee) => {
-        const option = document.createElement("option");
-        option.value = employee.id;
-        option.textContent = employee.name;
-        select.appendChild(option);
+        list.appendChild(buildSelectionCheckbox(employee.name, employee.id, previousValues.has(employee.id)));
     });
-    if (previousValue && state.employees.some((employee) => employee.id === previousValue)) {
-        select.value = previousValue;
+    if (!previousValues.size && list.querySelectorAll("input").length) {
+        const firstCheckbox = list.querySelector("input");
+        if (firstCheckbox) {
+            firstCheckbox.checked = true;
+        }
     }
+
+    const selectedCount = Array.from(list.querySelectorAll("input:checked")).length;
+    selectAll.checked = list.querySelectorAll("input").length > 0 && selectedCount === list.querySelectorAll("input").length;
+}
+
+function getSelectedManualCreditEmployeeIds() {
+    const list = document.getElementById("manualCreditEmployeeList");
+    if (!list) {
+        return [];
+    }
+    return Array.from(list.querySelectorAll("input:checked"))
+        .map((input) => `${input.value || ""}`.trim())
+        .filter((value) => Boolean(value));
+}
+
+function setManualCreditEmployeeSelection(selectAllChecked) {
+    const list = document.getElementById("manualCreditEmployeeList");
+    const selectAll = document.getElementById("manualCreditEmployeeSelectAll");
+    if (!list || !selectAll) {
+        return;
+    }
+    Array.from(list.querySelectorAll("input")).forEach((checkbox) => {
+        checkbox.checked = Boolean(selectAllChecked);
+    });
+    selectAll.checked = Boolean(selectAllChecked) && list.querySelectorAll("input").length > 0;
+}
+
+function syncManualCreditSelectAllState() {
+    const list = document.getElementById("manualCreditEmployeeList");
+    const selectAll = document.getElementById("manualCreditEmployeeSelectAll");
+    if (!list || !selectAll) {
+        return;
+    }
+    const totalCount = list.querySelectorAll("input").length;
+    const selectedCount = list.querySelectorAll("input:checked").length;
+    selectAll.checked = totalCount > 0 && selectedCount === totalCount;
 }
 
 function buildSelectionCheckbox(labelText, value, checked = false) {
@@ -3084,14 +3303,14 @@ function addManualWfhCreditRule() {
         return;
     }
 
-    const employeeId = employeeSelect.value;
+    const employeeIds = getSelectedManualCreditEmployeeIds();
     const occurrencesRequired = Number(occurrenceInput.value);
     const years = getCheckedValuesFromList("manualCreditYearList", true);
     const months = getCheckedValuesFromList("manualCreditMonthList", true);
     const weeks = getCheckedValuesFromList("manualCreditWeekList", false);
 
-    if (!employeeId) {
-        setManualCreditFeedback("Select a specific employee.", "error");
+    if (!employeeIds.length) {
+        setManualCreditFeedback("Select at least one employee.", "error");
         return;
     }
     if (!Number.isFinite(occurrencesRequired) || occurrencesRequired < 1) {
@@ -3105,29 +3324,35 @@ function addManualWfhCreditRule() {
     }
 
     state.manualWfhCreditRules = state.manualWfhCreditRules || [];
-    state.manualWfhCreditRules.push({
-        id: createId(),
-        employeeId,
-        occurrencesRequired,
-        years,
-        months,
-        weeks,
-        createdAt: new Date().toISOString(),
+    const createdAt = new Date().toISOString();
+    employeeIds.forEach((employeeId) => {
+        state.manualWfhCreditRules.push({
+            id: createId(),
+            employeeId,
+            occurrencesRequired,
+            years,
+            months,
+            weeks,
+            createdAt,
+        });
     });
 
-    const targetEmployee = state.employees.find((entry) => entry.id === employeeId) || null;
-    const invalidatedDates = reconcileUsedCreditsAfterEligibilityChange(targetEmployee);
+    const invalidatedDates = [];
+    employeeIds.forEach((employeeId) => {
+        const targetEmployee = state.employees.find((entry) => entry.id === employeeId) || null;
+        invalidatedDates.push(...reconcileUsedCreditsAfterEligibilityChange(targetEmployee));
+    });
 
     saveState();
     render();
-    manualCreditActiveEmployeeFilter = employeeId;
+    manualCreditActiveEmployeeFilter = employeeIds.length === 1 ? employeeIds[0] : "all";
     renderManualCreditEmployeeTabs();
     renderManualCreditRuleList();
     occurrenceInput.value = "";
-    setManualCreditFeedback("Manual WFH credit log added.", "success");
+    setManualCreditFeedback(`Manual WFH credit log added for ${employeeIds.length} employee(s).`, "success");
 
     if (invalidatedDates.length) {
-        const dateList = invalidatedDates.join(", ");
+        const dateList = Array.from(new Set(invalidatedDates)).join(", ");
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
                 window.alert(`The previous "Use WFH Credit" for ${dateList} has been invalidated because your WFH Credit point is no longer available.`);
@@ -3781,6 +4006,9 @@ function hasAnySetupSelection(row) {
 }
 
 function getDisplayWorkSetup(row, employee) {
+    if (row.workSetupRemoved) {
+        return "";
+    }
     if (row.manualWfh) {
         return "WFH";
     }
@@ -4113,6 +4341,113 @@ function setRowWfoDone(employeeId, rowId, done) {
     render();
 }
 
+function removeRowWorkSetup(employeeId, rowId) {
+    const employee = state.employees.find((entry) => entry.id === employeeId);
+    if (!employee) {
+        return;
+    }
+    const row = employee.rows.find((entry) => entry.id === rowId);
+    if (!row) {
+        return;
+    }
+
+    const displaySetup = getDisplayWorkSetup(row, employee);
+    if (displaySetup === "WFO" && !row.wfoDone) {
+        window.alert('Please move the "WFO Ongoing" Work Setup to another date.');
+        return;
+    }
+
+    row.workSetupRemovalBackup = {
+        processingTime: row.processingTime || "",
+        accuracy: row.accuracy || "",
+        unapprovedLeave: row.unapprovedLeave || "",
+        unapprovedLeaveHalfDay: Boolean(row.unapprovedLeaveHalfDay),
+        wfoWave: row.wfoWave || "",
+        creditUsed: Boolean(row.creditUsed),
+        changeScheduleMonth: row.changeScheduleMonth || "",
+        changeScheduleDate: row.changeScheduleDate || "",
+        workSetup: row.workSetup || "",
+        wfoDone: Boolean(row.wfoDone),
+        manualWfo: Boolean(row.manualWfo),
+        manualWfoRemarks: row.manualWfoRemarks || "",
+        manualWfh: Boolean(row.manualWfh),
+        manualWfhRemarks: row.manualWfhRemarks || "",
+        manualOverrideBackup: row.manualOverrideBackup && typeof row.manualOverrideBackup === "object"
+            ? cloneState(row.manualOverrideBackup)
+            : null,
+    };
+
+    row.processingTime = "";
+    row.accuracy = "";
+    row.unapprovedLeave = "";
+    row.unapprovedLeaveHalfDay = false;
+    row.wfoWave = "";
+    row.creditUsed = false;
+    row.changeScheduleMonth = "";
+    row.changeScheduleDate = "";
+    row.workSetup = "";
+    row.wfoDone = false;
+    row.manualWfo = false;
+    row.manualWfoRemarks = "";
+    row.manualWfh = false;
+    row.manualWfhRemarks = "";
+    row.workSetupRemoved = true;
+    row.manualOverrideBackup = null;
+
+    recalculateRowWorkSetup(row);
+    syncWorkScheduleLeaveFromSetup(employee.id, row.dateValue, "", false);
+
+    if (!hasProjectionDriver(row, employee)) {
+        clearProjectedResultFromSource(employee, row.id);
+    }
+    ensureProjectedResultRow(employee, row);
+    syncEmployeeWfoDoneFlags(employee);
+    saveState();
+    render();
+}
+
+function undoRowWorkSetup(employeeId, rowId) {
+    const employee = state.employees.find((entry) => entry.id === employeeId);
+    if (!employee) {
+        return;
+    }
+    const row = employee.rows.find((entry) => entry.id === rowId);
+    if (!row || !row.workSetupRemoved) {
+        return;
+    }
+
+    const backup = row.workSetupRemovalBackup;
+    if (backup && typeof backup === "object") {
+        row.processingTime = backup.processingTime || "";
+        row.accuracy = backup.accuracy || "";
+        row.unapprovedLeave = backup.unapprovedLeave || "";
+        row.unapprovedLeaveHalfDay = Boolean(backup.unapprovedLeaveHalfDay);
+        row.wfoWave = backup.wfoWave || "";
+        row.creditUsed = Boolean(backup.creditUsed);
+        row.changeScheduleMonth = backup.changeScheduleMonth || "";
+        row.changeScheduleDate = backup.changeScheduleDate || "";
+        row.workSetup = backup.workSetup || "";
+        row.wfoDone = Boolean(backup.wfoDone);
+        row.manualWfo = Boolean(backup.manualWfo);
+        row.manualWfoRemarks = backup.manualWfoRemarks || "";
+        row.manualWfh = Boolean(backup.manualWfh);
+        row.manualWfhRemarks = backup.manualWfhRemarks || "";
+        row.manualOverrideBackup = backup.manualOverrideBackup && typeof backup.manualOverrideBackup === "object"
+            ? cloneState(backup.manualOverrideBackup)
+            : null;
+    }
+
+    row.workSetupRemoved = false;
+    row.workSetupRemovalBackup = null;
+
+    recalculateRowWorkSetup(row);
+    syncWorkScheduleLeaveFromSetup(employee.id, row.dateValue, row.unapprovedLeave, row.unapprovedLeaveHalfDay);
+    ensureProjectedResultRow(employee, row);
+    syncEmployeeWfoDoneFlags(employee);
+    saveState();
+    render();
+}
+
 function openManualWfoModal(employeeId, rowId) {
     const employee = state.employees.find((entry) => entry.id === employeeId);
     if (!employee) {
@@ -4197,6 +4532,7 @@ function setManualWfo(employeeId, rowId, remarks) {
     row.manualWfoRemarks = remarksText;
     row.manualWfh = false;
     row.manualWfhRemarks = "";
+    row.workSetupRemoved = false;
     row.wfoDone = false;
     row.wfoWave = "";
     row.creditUsed = false;
@@ -4294,6 +4630,7 @@ function setManualWfh(employeeId, rowId, remarks) {
     row.manualWfhRemarks = remarksText;
     row.manualWfo = false;
     row.manualWfoRemarks = "";
+    row.workSetupRemoved = false;
     row.wfoDone = false;
     row.wfoWave = "";
     row.creditUsed = false;
@@ -4322,6 +4659,7 @@ function undoManualOverride(employeeId, rowId) {
     row.manualWfoRemarks = "";
     row.manualWfh = false;
     row.manualWfhRemarks = "";
+    row.workSetupRemoved = false;
 
     if (backup) {
         row.wfoWave = backup.wfoWave || "";
@@ -4543,6 +4881,44 @@ function getNextDateValue(employee) {
         : (selectedMonths[0] || selectedMonth || 1);
     const monthIndex = Math.max(0, activeMonth - 1);
 
+    const takenDates = new Set(
+        employee.rows
+            .map((row) => parseDateValue(row.dateValue))
+            .filter((date) => !Number.isNaN(date.getTime()))
+            .map((date) => formatDateValue(date)),
+    );
+
+    const monthPriority = [
+        activeMonth,
+        ...selectedMonths.filter((value) => value !== activeMonth),
+    ];
+
+    // Fill missing day gaps first within selected month timelines.
+    for (const monthValue of monthPriority) {
+        const monthRows = employee.rows
+            .filter((row) => {
+                const date = parseDateValue(row.dateValue);
+                return date.getFullYear() === year && (date.getMonth() + 1) === monthValue;
+            })
+            .sort((left, right) => parseDateValue(left.dateValue) - parseDateValue(right.dateValue));
+
+        for (let index = 1; index < monthRows.length; index += 1) {
+            const previousDate = parseDateValue(monthRows[index - 1].dateValue);
+            const currentDate = parseDateValue(monthRows[index].dateValue);
+            if (Number.isNaN(previousDate.getTime()) || Number.isNaN(currentDate.getTime())) {
+                continue;
+            }
+            const dayGap = currentDate.getDate() - previousDate.getDate();
+            if (dayGap > 1) {
+                const gapDate = new Date(year, monthValue - 1, previousDate.getDate() + 1);
+                const gapDateValue = formatDateValue(gapDate);
+                if (!takenDates.has(gapDateValue)) {
+                    return gapDateValue;
+                }
+            }
+        }
+    }
+
     const monthRows = employee.rows
         .filter((row) => {
             const date = parseDateValue(row.dateValue);
@@ -4550,7 +4926,7 @@ function getNextDateValue(employee) {
         })
         .sort((left, right) => parseDateValue(left.dateValue) - parseDateValue(right.dateValue));
 
-    // Keep row creation moving forward from the active month timeline.
+    // If there are no missing gaps, continue forward from the active month timeline.
     const baseDate = monthRows.length
         ? parseDateValue(monthRows[monthRows.length - 1].dateValue)
         : new Date(year, monthIndex, 1);
@@ -4559,15 +4935,7 @@ function getNextDateValue(employee) {
         candidate.setDate(candidate.getDate() + 1);
     }
 
-    const takenDates = new Set(
-        employee.rows
-            .map((row) => parseDateValue(row.dateValue))
-            .filter((date) => !Number.isNaN(date.getTime()))
-            .map((date) => formatDateValue(date)),
-    );
-
-    // Fill the earliest available day from the active timeline forward
-    // (e.g., Aug 31 -> Sep 1 -> Sep 2, even if Sep 15 already exists).
+    // Fill the earliest available day from the active timeline forward.
     const cursor = new Date(candidate);
     while (takenDates.has(formatDateValue(cursor))) {
         cursor.setDate(cursor.getDate() + 1);
@@ -4584,6 +4952,10 @@ function updateRow(employeeId, rowId, field, value) {
     const row = employee.rows.find((entry) => entry.id === rowId);
     if (!row) {
         return;
+    }
+
+    if (["processingTime", "wfoWave", "accuracy", "unapprovedLeave", "changeScheduleMonth", "changeScheduleDate"].includes(field)) {
+        row.workSetupRemoved = false;
     }
 
     if (field === "processingTime") {
@@ -4700,40 +5072,49 @@ function updateRow(employeeId, rowId, field, value) {
     render();
 }
 
-function updateDateRow(employeeId, rowId, yearText, monthText, dayText) {
+function updateDateRow(employeeId, rowId, yearText, monthText, dayText, options = {}) {
     const employee = state.employees.find((entry) => entry.id === employeeId);
     if (!employee) {
-        return;
+        return false;
     }
     const row = employee.rows.find((entry) => entry.id === rowId);
     if (!row) {
-        return;
+        return false;
     }
 
     const monthIndex = parseMonthValue(monthText);
     if (monthIndex === null) {
-        return;
+        return false;
     }
 
     const yearValue = Number(yearText);
     if (!Number.isFinite(yearValue) || yearValue < 2026) {
-        return;
+        return false;
     }
 
     const nextDateValue = buildDateValue(yearValue, monthIndex, dayText);
     const duplicateRow = employee.rows.find((entry) => entry.id !== row.id && entry.dateValue === nextDateValue);
     if (duplicateRow) {
-        window.alert("Date already exists.");
-        return;
+        if (options.showDuplicateAlert !== false) {
+            window.alert("Date already exists.");
+        }
+        return false;
     }
 
+    if (row.dateValue === nextDateValue) {
+        return true;
+    }
+
+    const previousDateValue = row.dateValue;
     row.dateValue = nextDateValue;
+    replaceDateInActiveFilters(previousDateValue, nextDateValue);
     syncDatePresenceAcrossViews();
     ensureDateSequence(employee);
     ensureProjectedResultRow(employee, row);
     syncEmployeeWfoDoneFlags(employee);
     saveState();
     render();
+    return true;
 }
 
 function clearChangeScheduleSelection(employee, row, options = {}) {
@@ -4791,6 +5172,7 @@ function applyChangeScheduleUpdate(employeeId, rowId, monthText, dayText) {
 
     row.changeScheduleMonth = monthText;
     row.changeScheduleDate = dayText;
+    row.workSetupRemoved = false;
     if (monthText && dayText) {
         const targetDateValue = buildDateValue(Number(state.selectedYear), monthIndex, dayText);
         const defaultTargetDate = addDays(row.dateValue, 7);
@@ -5944,11 +6326,14 @@ function renderFilters() {
     let normalizedSelectedWeeks = selectedWeeks.filter((week) => week === "all" || availableWeeks.includes(week));
     let restoredWeeksFromMonths = false;
     if (selectedMonths.length && !normalizedSelectedWeeks.length) {
-        const rememberedWeeks = getRememberedWeeksForMonths(selectedMonths).filter((week) => week === "all" || availableWeeks.includes(week));
-        normalizedSelectedWeeks = rememberedWeeks.length
-            ? rememberedWeeks
-            : (availableWeeks.length ? ["all"] : []);
-        restoredWeeksFromMonths = normalizedSelectedWeeks.length > 0;
+        const hasRememberedWeeks = hasRememberedWeeksForMonths(selectedMonths);
+        if (hasRememberedWeeks) {
+            normalizedSelectedWeeks = getRememberedWeeksForMonths(selectedMonths)
+                .filter((week) => week === "all" || availableWeeks.includes(week));
+        } else {
+            normalizedSelectedWeeks = availableWeeks.length ? ["all"] : [];
+            restoredWeeksFromMonths = normalizedSelectedWeeks.length > 0;
+        }
     }
 
     const availableDays = getAvailableDayValues(Number(state.selectedYear) || 2026, selectedMonths, normalizedSelectedWeeks, state.selectedSubtrade);
@@ -6344,9 +6729,6 @@ function renderTable() {
             option.selected = yearValue === currentYear;
             yearSelect.appendChild(option);
         });
-        yearSelect.addEventListener("change", () => {
-            updateDateRow(row.employeeId, row.id, yearSelect.value, monthSelect.value, dateSelect.value || currentDay);
-        });
         yearCell.appendChild(yearSelect);
         tr.appendChild(yearCell);
 
@@ -6354,9 +6736,6 @@ function renderTable() {
         const monthSelect = document.createElement("select");
         monthSelect.className = "select-field compact-date-select compact-month-select";
         appendMonthOptions(monthSelect, currentMonthIndex);
-        monthSelect.addEventListener("change", (event) => {
-            updateDateRow(row.employeeId, row.id, yearSelect.value, event.target.value, dateSelect.value || currentDay);
-        });
         monthCell.appendChild(monthSelect);
         tr.appendChild(monthCell);
 
@@ -6364,16 +6743,60 @@ function renderTable() {
         const dateSelect = document.createElement("select");
         dateSelect.className = "select-field compact-date-select compact-day-select";
         appendDayOptions(dateSelect, getDaysInMonth(Number(yearSelect.value), currentMonthIndex), currentDay);
-        dateSelect.addEventListener("change", (event) => {
-            updateDateRow(row.employeeId, row.id, yearSelect.value, monthSelect.value, event.target.value);
-        });
-        monthSelect.addEventListener("change", () => {
+
+        const syncDayOptions = () => {
             const monthIndex = Number(monthSelect.value) - 1;
             const totalDays = getDaysInMonth(Number(yearSelect.value), monthIndex);
             const selectedDay = Math.min(Number(dateSelect.value) || 1, totalDays);
             dateSelect.innerHTML = "";
             appendDayOptions(dateSelect, totalDays, selectedDay);
+        };
+
+        const resetDateSelectorsFromRow = () => {
+            const latestRow = employee.rows.find((entry) => entry.id === row.id);
+            if (!latestRow) {
+                return;
+            }
+            const latestDate = parseDateValue(latestRow.dateValue);
+            if (Number.isNaN(latestDate.getTime())) {
+                return;
+            }
+            yearSelect.value = String(latestDate.getFullYear());
+            appendMonthOptions(monthSelect, latestDate.getMonth());
+            const totalDays = getDaysInMonth(latestDate.getFullYear(), latestDate.getMonth());
+            dateSelect.innerHTML = "";
+            appendDayOptions(dateSelect, totalDays, latestDate.getDate());
+        };
+
+        yearSelect.addEventListener("change", () => {
+            syncDayOptions();
+            const updated = updateDateRow(row.employeeId, row.id, yearSelect.value, monthSelect.value, dateSelect.value || currentDay, {
+                showDuplicateAlert: false,
+            });
+            if (!updated) {
+                resetDateSelectorsFromRow();
+            }
         });
+
+        monthSelect.addEventListener("change", () => {
+            syncDayOptions();
+            const updated = updateDateRow(row.employeeId, row.id, yearSelect.value, monthSelect.value, dateSelect.value || currentDay, {
+                showDuplicateAlert: false,
+            });
+            if (!updated) {
+                resetDateSelectorsFromRow();
+            }
+        });
+
+        dateSelect.addEventListener("change", (event) => {
+            const updated = updateDateRow(row.employeeId, row.id, yearSelect.value, monthSelect.value, event.target.value, {
+                showDuplicateAlert: true,
+            });
+            if (!updated) {
+                resetDateSelectorsFromRow();
+            }
+        });
+
         dateCell.appendChild(dateSelect);
         tr.appendChild(dateCell);
 
@@ -6388,6 +6811,13 @@ function renderTable() {
         processingInput.placeholder = "HH:MM:SS";
         processingInput.value = row.processingTime;
         processingInput.disabled = shouldDisableProcessingInput(row);
+        processingInput.dataset.arrowCellNavUnlocked = "false";
+        processingInput.addEventListener("focus", () => {
+            processingInput.dataset.arrowCellNavUnlocked = "false";
+        });
+        processingInput.addEventListener("input", () => {
+            processingInput.dataset.arrowCellNavUnlocked = "false";
+        });
         processingInput.addEventListener("change", (event) => {
             updateRow(row.employeeId, row.id, "processingTime", event.target.value);
         });
@@ -6592,6 +7022,19 @@ function renderTable() {
             });
             actionsCell.appendChild(manualWfoButton);
         }
+
+        const removeSetupButton = document.createElement("button");
+        removeSetupButton.className = "secondary-btn mini-btn";
+        removeSetupButton.textContent = row.workSetupRemoved ? "Undo Work Setup" : "Remove Work Setup";
+        removeSetupButton.addEventListener("click", () => {
+            if (row.workSetupRemoved) {
+                undoRowWorkSetup(row.employeeId, row.id);
+                return;
+            }
+            removeRowWorkSetup(row.employeeId, row.id);
+        });
+        actionsCell.appendChild(removeSetupButton);
+
         const deleteButton = document.createElement("button");
         deleteButton.className = "icon-btn row-delete-btn";
         deleteButton.textContent = "🗑";
@@ -6619,7 +7062,7 @@ function buildOverviewSeries(rows) {
         { label: "Off Target", value: rows.filter((row) => isProcessingTimeOffTarget(row, null)).length, color: "#dc2626" },
         { label: "With Error", value: rows.filter((row) => row.accuracy === "With Error").length, color: "#f59e0b" },
         { label: "Leave Type", value: rows.filter((row) => ["SL", "EL"].includes((row.unapprovedLeave || "").trim())).length, color: "#ef4444" },
-        { label: "WFH", value: trackedRows.filter((row) => row.displaySetup === "WFH").length, color: "#14b8a6" },
+        { label: "WFH", value: trackedRows.filter((row) => !row.workSetupRemoved && row.displaySetup === "WFH").length, color: "#14b8a6" },
         { label: "WFO Pending", value: trackedRows.filter((row) => row.displaySetup === "WFO" && !row.wfoDone).length, color: "#2563eb" },
         { label: "WFO Done", value: trackedRows.filter((row) => row.displaySetup === "WFO" && row.wfoDone).length, color: "#16a34a" },
     ];
@@ -6656,7 +7099,7 @@ function getSelectedDashboardContributorEmployees() {
 
 function getEmployeeContributorMetricsSnapshot(employee) {
     const rows = getFilteredRows(employee);
-    const trackedRows = rows.filter((row) => ["WFO", "WFH"].includes(getDisplayWorkSetup(row, employee)));
+    const trackedRows = rows.filter((row) => !row.workSetupRemoved && ["WFO", "WFH"].includes(getDisplayWorkSetup(row, employee)));
     const wfoRows = trackedRows.filter((row) => getDisplayWorkSetup(row, employee) === "WFO");
     const unapprovedLeavesWith = rows.filter((row) => {
         const leave = `${row.unapprovedLeave || ""}`.trim();
@@ -6685,7 +7128,20 @@ function getEmployeeContributorMetricsSnapshot(employee) {
 
 function getWorkScheduleDashboardSnapshot() {
     const filteredDates = new Set(getWorkScheduleDateValues());
-    const assignments = (state.workScheduleAssignments || []).filter((entry) => filteredDates.has(entry.dateValue));
+    const selectedSubtrade = `${state.selectedSubtrade || "all"}`.trim() || "all";
+    const scopedEmployees = getVisibleEmployees().filter((employee) => {
+        if (selectedSubtrade === "all") {
+            return true;
+        }
+        return normalizeSubtradeValue(employee?.subtrade || "") === normalizeSubtradeValue(selectedSubtrade);
+    });
+    const scopedEmployeeIds = new Set(scopedEmployees.map((employee) => employee.id));
+    const employeeById = new Map(scopedEmployees.map((employee) => [employee.id, employee]));
+
+    const assignments = (state.workScheduleAssignments || []).filter((entry) =>
+        filteredDates.has(entry.dateValue)
+        && scopedEmployeeIds.has(entry.employeeId),
+    );
     const shiftMap = new Map();
     const leaveMap = new Map([
         ["SL", { count: 0, rows: [] }],
@@ -6704,7 +7160,7 @@ function getWorkScheduleDashboardSnapshot() {
     };
 
     assignments.forEach((assignment) => {
-        const employee = state.employees.find((entry) => entry.id === assignment.employeeId);
+        const employee = employeeById.get(assignment.employeeId) || null;
         const row = employee?.rows?.find((entry) => entry.dateValue === assignment.dateValue) || null;
         const setup = row ? getDisplayWorkSetup(row, employee) : "";
         const shift = `${assignment.workShift || ""}`.trim();
@@ -6997,6 +7453,9 @@ function renderDashboard() {
     const content = document.getElementById("dashboardContent");
     const rows = getAllRows();
     const trackedRows = rows.filter((row) => {
+        if (row.workSetupRemoved) {
+            return false;
+        }
         const employee = state.employees.find((entry) => entry.id === row.employeeId);
         return ["WFO", "WFH"].includes(getDisplayWorkSetup(row, employee));
     });
@@ -7402,7 +7861,8 @@ function renderTrash() {
     const employees = state.deleted?.employees || [];
     const manualCreditRules = state.deleted?.manualCreditRules || [];
     const taskTargets = state.deleted?.taskTargets || [];
-    if (!rows.length && !employees.length && !manualCreditRules.length && !taskTargets.length) {
+    const quickScheduleLogs = state.deleted?.quickScheduleLogs || [];
+    if (!rows.length && !employees.length && !manualCreditRules.length && !taskTargets.length && !quickScheduleLogs.length) {
         content.innerHTML = '<p class="table-title">Trash bin is empty.</p>';
         return;
     }
@@ -7534,6 +7994,41 @@ function renderTrash() {
         taskTargetCard.appendChild(row);
     });
     content.appendChild(taskTargetCard);
+
+    const quickScheduleCard = document.createElement("div");
+    quickScheduleCard.className = "stack-card";
+    quickScheduleCard.innerHTML = `<h3>Deleted Quick Schedule Logs (${quickScheduleLogs.length})</h3>`;
+    quickScheduleLogs.forEach((entry) => {
+        const row = document.createElement("div");
+        row.className = "trash-row";
+        const log = entry.log || {};
+        const employeesText = (Array.isArray(log.employeeIds) ? log.employeeIds : [])
+            .map((employeeId) => state.employees.find((employee) => employee.id === employeeId)?.name || "Unknown")
+            .join(", ");
+        const shiftLabel = log.workShift
+            ? `${log.shiftName || "Shift"} - ${log.workShift}`
+            : "(No Shift)";
+        const dateCount = Array.isArray(log.dateValues) ? log.dateValues.length : 0;
+        row.innerHTML = `<div><strong>${shiftLabel}</strong><br><span>${dateCount} day(s) • ${employeesText || "No employee"}</span><br><span>Deleted: ${formatTimestamp(entry.deletedAt)}</span></div>`;
+
+        const actions = document.createElement("div");
+        actions.className = "trash-actions";
+        const restoreButton = document.createElement("button");
+        restoreButton.className = "secondary-btn";
+        restoreButton.textContent = "Restore";
+        restoreButton.addEventListener("click", () => restoreDeletedQuickScheduleLog(entry.id));
+
+        const deleteForeverButton = document.createElement("button");
+        deleteForeverButton.className = "danger-btn";
+        deleteForeverButton.textContent = "Delete Forever";
+        deleteForeverButton.addEventListener("click", () => deleteQuickScheduleLogForever(entry.id));
+
+        actions.appendChild(restoreButton);
+        actions.appendChild(deleteForeverButton);
+        row.appendChild(actions);
+        quickScheduleCard.appendChild(row);
+    });
+    content.appendChild(quickScheduleCard);
 }
 
 function setActiveView(view) {
@@ -7585,10 +8080,7 @@ function openSettings(options = {}) {
     }
     renderEmployeeNamesSettingsList();
     renderWorkShiftList();
-    populateWorkScheduleDateInputs();
-    renderWorkScheduleDateList();
     setWorkShiftFeedback("Add Shift Name and Schedule pairs available per day.");
-    setWorkScheduleDateFeedback("Dates added here are shown in Work Schedule columns.");
     renderAdminAccountList();
 
     modal.classList.remove("hidden");
@@ -8051,7 +8543,9 @@ function renderQuickScheduleLogs() {
         return;
     }
     list.innerHTML = "";
-    const logs = Array.isArray(state.quickScheduleLogs) ? [...state.quickScheduleLogs] : [];
+    const logs = Array.isArray(state.quickScheduleLogs)
+        ? state.quickScheduleLogs.filter((entry) => !entry.deleted).map((entry) => ({ ...entry }))
+        : [];
     logs.sort((left, right) => (Date.parse(right.createdAt || "") || 0) - (Date.parse(left.createdAt || "") || 0));
 
     if (!logs.length) {
@@ -8073,29 +8567,28 @@ function renderQuickScheduleLogs() {
         const actions = document.createElement("div");
         actions.className = "trash-actions";
         const toggleButton = document.createElement("button");
-        toggleButton.className = log.deleted ? "secondary-btn" : "danger-btn";
+        toggleButton.className = "danger-btn";
         toggleButton.type = "button";
-        toggleButton.textContent = log.deleted ? "Restore" : "Delete";
+        toggleButton.textContent = "Delete";
         toggleButton.addEventListener("click", () => {
-            if (log.deleted) {
-                log.deleted = false;
-                log.employeeIds.forEach((employeeId) => {
-                    log.dateValues.forEach((dateValue) => {
-                        upsertWorkScheduleAssignment(employeeId, dateValue, {
-                            shiftName: log.shiftName,
-                            workShift: log.workShift,
-                            unapprovedLeave: log.unapprovedLeave,
-                            unapprovedLeaveHalfDay: Boolean(log.unapprovedLeaveHalfDay),
-                            source: "quick",
-                            quickLogId: log.id,
-                        });
-                        syncSetupLeaveFromWorkSchedule(employeeId, dateValue, log.unapprovedLeave, Boolean(log.unapprovedLeaveHalfDay));
-                    });
-                });
-            } else {
-                log.deleted = true;
-                state.workScheduleAssignments = (state.workScheduleAssignments || []).filter((entry) => entry.quickLogId !== log.id);
-            }
+            state.deleted = state.deleted || {};
+            state.deleted.quickScheduleLogs = state.deleted.quickScheduleLogs || [];
+            state.deleted.quickScheduleLogs.unshift({
+                id: createId(),
+                deletedAt: new Date().toISOString(),
+                log: {
+                    id: log.id,
+                    createdAt: log.createdAt,
+                    employeeIds: [...(log.employeeIds || [])],
+                    dateValues: [...(log.dateValues || [])],
+                    shiftName: log.shiftName,
+                    workShift: log.workShift,
+                    unapprovedLeave: log.unapprovedLeave,
+                    unapprovedLeaveHalfDay: Boolean(log.unapprovedLeaveHalfDay),
+                },
+            });
+            state.quickScheduleLogs = (state.quickScheduleLogs || []).filter((entry) => entry.id !== log.id);
+            state.workScheduleAssignments = (state.workScheduleAssignments || []).filter((entry) => entry.quickLogId !== log.id);
             saveState();
             render();
             renderQuickScheduleLogs();
@@ -8823,10 +9316,74 @@ function moveTableFocusHorizontally(row, cellIndex, direction, currentElement) {
     return false;
 }
 
+function isTableArrowNavigationBody(section) {
+    return section?.id === "scheduleBody" || section?.id === "workScheduleBody";
+}
+
+function isTableTextEntryControl(target) {
+    if (target instanceof HTMLTextAreaElement) {
+        return !target.disabled && !target.readOnly;
+    }
+    if (!(target instanceof HTMLInputElement)) {
+        return false;
+    }
+    if (target.disabled || target.readOnly) {
+        return false;
+    }
+    const nonTextInputTypes = new Set([
+        "checkbox",
+        "radio",
+        "button",
+        "submit",
+        "reset",
+        "file",
+        "color",
+        "range",
+        "hidden",
+        "image",
+    ]);
+    const inputType = `${target.type || "text"}`.toLowerCase();
+    return !nonTextInputTypes.has(inputType);
+}
+
 function setupTableArrowNavigation() {
+    document.addEventListener("focusin", (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) {
+            return;
+        }
+        if (!isTableTextEntryControl(target)) {
+            return;
+        }
+        const cell = target.closest("td");
+        const row = cell?.closest("tr");
+        const section = row?.parentElement;
+        if (!isTableArrowNavigationBody(section)) {
+            return;
+        }
+        target.dataset.arrowCellNavUnlocked = "false";
+    });
+
+    document.addEventListener("input", (event) => {
+        const target = event.target;
+        if (!(target instanceof HTMLElement)) {
+            return;
+        }
+        if (!isTableTextEntryControl(target)) {
+            return;
+        }
+        const cell = target.closest("td");
+        const row = cell?.closest("tr");
+        const section = row?.parentElement;
+        if (!isTableArrowNavigationBody(section)) {
+            return;
+        }
+        target.dataset.arrowCellNavUnlocked = "false";
+    });
+
     document.addEventListener("keydown", (event) => {
         const key = event.key;
-        if (!["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(key)) {
+        if (!["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Escape"].includes(key)) {
             return;
         }
         if (event.altKey || event.ctrlKey || event.metaKey) {
@@ -8848,9 +9405,26 @@ function setupTableArrowNavigation() {
             return;
         }
 
-        const isWorkSetupBody = section.id === "scheduleBody";
-        const isWorkScheduleBody = section.id === "workScheduleBody";
-        if (!isWorkSetupBody && !isWorkScheduleBody) {
+        if (!isTableArrowNavigationBody(section)) {
+            return;
+        }
+
+        const isTextEntryControl = isTableTextEntryControl(target);
+        if (isTextEntryControl && key === "Escape") {
+            // Escape unlocks table-to-table arrow navigation from this text-entry cell.
+            target.dataset.arrowCellNavUnlocked = "true";
+            event.preventDefault();
+            event.stopPropagation();
+            return;
+        }
+
+        if (isTextEntryControl && key.startsWith("Arrow") && target.dataset.arrowCellNavUnlocked !== "true") {
+            // While editing text-entry controls, keep arrow keys inside the same cell.
+            event.stopPropagation();
+            return;
+        }
+
+        if (key === "Escape") {
             return;
         }
 
@@ -8910,11 +9484,9 @@ function setupEvents() {
     document.getElementById("closeViewScopeSettingsBtn").addEventListener("click", () => closeSettingsDetailModal("viewScopeSettingsModal"));
     document.getElementById("closeEmployeeNamesSettingsBtn").addEventListener("click", () => closeSettingsDetailModal("employeeNamesSettingsModal"));
     document.getElementById("closeWorkShiftSettingsBtn").addEventListener("click", () => closeSettingsDetailModal("workShiftSettingsModal"));
-    document.getElementById("closeWorkScheduleDatesSettingsBtn").addEventListener("click", () => closeSettingsDetailModal("workScheduleDatesSettingsModal"));
     document.getElementById("closeHardResetSettingsBtn").addEventListener("click", () => closeSettingsDetailModal("hardResetSettingsModal"));
     document.getElementById("closeManualWfhCreditOptionsBtn").addEventListener("click", closeManualWfhCreditOptionsModal);
     document.getElementById("addWorkShiftBtn").addEventListener("click", addWorkShift);
-    document.getElementById("addWorkScheduleDateBtn").addEventListener("click", addWorkScheduleDate);
     document.getElementById("confirmAddEmployeeTabBtn").addEventListener("click", confirmAddEmployeeFromTabs);
     document.getElementById("cancelAddEmployeeTabBtn").addEventListener("click", closeAddEmployeeTabModal);
     document.getElementById("addQuickScheduleBtn").addEventListener("click", openQuickScheduleModal);
@@ -8929,6 +9501,10 @@ function setupEvents() {
     document.getElementById("closeQuickScheduleLeaveLegendBtn").addEventListener("click", closeQuickScheduleLeaveLegendModal);
     document.getElementById("applyQuickScheduleBtn").addEventListener("click", applyQuickSchedule);
     document.getElementById("addManualCreditRuleBtn").addEventListener("click", addManualWfhCreditRule);
+    document.getElementById("manualCreditEmployeeSelectAll").addEventListener("change", (event) => {
+        setManualCreditEmployeeSelection(event.target.checked);
+    });
+    document.getElementById("manualCreditEmployeeList").addEventListener("change", syncManualCreditSelectAllState);
     document.getElementById("clearManualCreditFiltersBtn").addEventListener("click", clearManualCreditLogFilters);
     document.getElementById("addSubtradeTargetBtn").addEventListener("click", addSubtradeProcessingTarget);
     document.getElementById("cancelSubtradeTargetEditBtn").addEventListener("click", cancelSubtradeTargetEdit);
@@ -9198,6 +9774,16 @@ function setupEvents() {
             return;
         }
         state.selectedYear = Number(event.target.value);
+        state.selectedMonths = monthNames.map((_, index) => index + 1);
+        state.selectedMonth = state.selectedMonths[0] || 1;
+        {
+            const availableWeeks = getAvailableWeekValues(Number(state.selectedYear) || 2026, state.selectedMonths);
+            state.selectedWeeks = availableWeeks.length ? ["all"] : [];
+            state.selectedWeek = state.selectedWeeks[0] || "all";
+            state.selectedDays = state.selectedWeeks.length
+                ? getAvailableDayValues(Number(state.selectedYear) || 2026, state.selectedMonths, state.selectedWeeks, state.selectedSubtrade)
+                : [];
+        }
         saveState();
         render();
     });
@@ -9311,8 +9897,7 @@ function setupEvents() {
         }
 
         const availableWeeks = getAvailableWeekValues(Number(state.selectedYear) || 2026, state.selectedMonths);
-        const rememberedWeeks = getRememberedWeeksForMonths(state.selectedMonths).filter((week) => week === "all" || availableWeeks.includes(week));
-        state.selectedWeeks = rememberedWeeks.length ? rememberedWeeks : (availableWeeks.length ? ["all"] : []);
+        state.selectedWeeks = availableWeeks.length ? ["all"] : [];
         state.selectedWeek = state.selectedWeeks[0] || "all";
         state.selectedDays = state.selectedWeeks.length
             ? getAvailableDayValues(Number(state.selectedYear) || 2026, state.selectedMonths, state.selectedWeeks, state.selectedSubtrade)
@@ -9369,8 +9954,7 @@ function setupEvents() {
         }
 
         const availableWeeks = getAvailableWeekValues(Number(state.selectedYear) || 2026, selectedMonths);
-        const rememberedWeeks = getRememberedWeeksForMonths(selectedMonths).filter((week) => week === "all" || availableWeeks.includes(week));
-        state.selectedWeeks = rememberedWeeks.length ? rememberedWeeks : (availableWeeks.length ? ["all"] : []);
+        state.selectedWeeks = availableWeeks.length ? ["all"] : [];
         state.selectedWeek = state.selectedWeeks[0] || "all";
         state.selectedDays = state.selectedWeeks.length
             ? getAvailableDayValues(Number(state.selectedYear) || 2026, selectedMonths, state.selectedWeeks, state.selectedSubtrade)
