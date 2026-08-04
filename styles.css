@@ -2137,6 +2137,10 @@ input[type="color"]::-moz-color-swatch,
   --avatar-size: 34px;
 }
 
+.employee-settings-avatar.clickable {
+  cursor: pointer;
+}
+
 @media (max-width: 1500px) {
   .employee-names-settings-card .settings-row-fields {
     grid-template-columns: repeat(3, minmax(180px, 1fr));
