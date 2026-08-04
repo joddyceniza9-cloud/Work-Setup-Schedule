@@ -80,8 +80,31 @@
             <h2 id="activeTabLabel">All Employees</h2>
           </div>
           <div class="table-actions-right">
+            <div class="work-schedule-zoom-controls" aria-label="Work Setup zoom controls">
+              <button id="workSetupZoomOutBtn" class="secondary-btn" type="button" title="Zoom Out">-</button>
+              <span id="workSetupZoomLabel" class="zoom-label">100%</span>
+              <button id="workSetupZoomInBtn" class="secondary-btn" type="button" title="Zoom In">+</button>
+            </div>
             <button id="sequenceDatesBtn" class="secondary-btn">Sequence</button>
             <button id="addRowBtn" class="secondary-btn">Add Schedule Row</button>
+            <div class="bulk-actions-wrap">
+              <button id="bulkActionsBtn" class="secondary-btn bulk-actions-btn" type="button" aria-haspopup="true"
+                aria-expanded="false">Bulk Actions</button>
+              <div id="bulkActionsMenu" class="bulk-actions-menu hidden" role="menu" aria-label="Bulk actions menu">
+                <button class="bulk-action-menu-item" type="button" data-bulk-action="manualWfo">Manual WFO</button>
+                <button class="bulk-action-menu-item" type="button" data-bulk-action="manualWfh">Manual WFH</button>
+                <button class="bulk-action-menu-item" type="button" data-bulk-action="undoManual">Undo Manual</button>
+                <button class="bulk-action-menu-item" type="button" data-bulk-action="changeSchedule">Change
+                  Schedule</button>
+                <button class="bulk-action-menu-item" type="button" data-bulk-action="useCredit">Use Credit</button>
+                <button class="bulk-action-menu-item" type="button" data-bulk-action="wfoDone">(WFO) Done</button>
+                <button class="bulk-action-menu-item" type="button" data-bulk-action="wfoUndo">(WFO) Undo</button>
+                <button class="bulk-action-menu-item" type="button" data-bulk-action="removeWorkSetup">Remove Work
+                  Setup</button>
+                <button class="bulk-action-menu-item" type="button" data-bulk-action="undoWorkSetup">Undo Work
+                  Setup</button>
+              </div>
+            </div>
           </div>
         </div>
         <div class="tabs-section">
@@ -883,6 +906,44 @@
         WFH.</p>
       <div class="auth-actions">
         <button id="saveManualWfhBtn" class="primary-btn" type="button">Apply Manual WFH</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="bulkActionModal" class="modal hidden" aria-hidden="true">
+    <div class="modal-card settings-detail-card bulk-action-card">
+      <div class="modal-header bulk-action-modal-header">
+        <h2 id="bulkActionModalTitle">Add Quick Action</h2>
+        <button id="closeBulkActionModalBtn" class="bulk-action-close-btn" type="button"
+          aria-label="Close bulk action modal">×</button>
+      </div>
+
+      <div class="bulk-action-grid">
+        <div class="field">
+          <span>Date(s)</span>
+          <div id="bulkActionDateList" class="selection-grid bulk-action-selection-grid"></div>
+        </div>
+        <div class="field">
+          <span>Employee(s)</span>
+          <div id="bulkActionEmployeeList" class="selection-grid bulk-action-selection-grid"></div>
+        </div>
+      </div>
+
+      <label id="bulkActionRemarksField" class="field hidden">
+        <span id="bulkActionRemarksLabel">Reason</span>
+        <textarea id="bulkActionRemarksInput" class="text-area" placeholder="Type your reason here..."></textarea>
+      </label>
+
+      <label class="field">
+        <span>System Alert</span>
+        <textarea id="bulkActionSystemAlert" class="text-area bulk-action-alert-box" readonly
+          placeholder="No system alerts."></textarea>
+      </label>
+
+      <p id="bulkActionFeedback" class="help-text auth-feedback">Select date(s) and employee(s) to apply.</p>
+
+      <div class="auth-actions">
+        <button id="applyBulkActionBtn" class="primary-btn" type="button">Apply Action</button>
       </div>
     </div>
   </div>
