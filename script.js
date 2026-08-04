@@ -1660,16 +1660,32 @@ function getSubtradeWeeklyCreditTargetNumber(subtrade) {
     return Number.isFinite(target) && target > 0 ? target : 0;
 }
 
+function getWfhCreditCycleEndDateValue(dateValue) {
+    const date = parseDateValue(dateValue);
+    const day = date.getDay();
+    const daysUntilThursday = (4 - day + 7) % 7;
+    const cycleEndDate = new Date(date);
+    cycleEndDate.setDate(cycleEndDate.getDate() + daysUntilThursday);
+    return formatDateValue(cycleEndDate);
+}
+
+function getWfhCreditCycleKey(dateValue) {
+    const cycleEndDateValue = getWfhCreditCycleEndDateValue(dateValue);
+    const cycleStartDateValue = addDays(cycleEndDateValue, -6);
+    return `${cycleStartDateValue}_${cycleEndDateValue}`;
+}
+
 function getManualCreditTargetForRow(employee, row) {
     if (!employee || !row?.dateValue || !Array.isArray(state.manualWfhCreditRules)) {
         return 0;
     }
     const targetOutcome = getOutcomeForTargetRow(employee, row);
     const creditReferenceDateValue = targetOutcome?.sourceRow?.dateValue || row.dateValue;
-    const date = parseDateValue(creditReferenceDateValue);
+    const cycleEndDateValue = getWfhCreditCycleEndDateValue(creditReferenceDateValue);
+    const date = parseDateValue(cycleEndDateValue);
     const year = date.getFullYear();
     const month = date.getMonth() + 1;
-    const week = `${getWeekNumber(creditReferenceDateValue)}`;
+    const week = `${getWeekNumber(cycleEndDateValue)}`;
 
     const matchingRules = state.manualWfhCreditRules
         .filter((rule) => rule.employeeId === employee.id
@@ -2313,6 +2329,52 @@ function renderEmployeeNamesSettingsList() {
         nameField.className = "employee-name-field";
 
         const avatar = createEmployeeAvatarElement(employee, { size: 34, className: "employee-settings-avatar" });
+        avatar.classList.add("clickable");
+        avatar.title = `Change ${employee.name || "employee"} profile picture`;
+        avatar.setAttribute("role", "button");
+        avatar.setAttribute("tabindex", "0");
+
+        const profileImageInput = document.createElement("input");
+        profileImageInput.type = "file";
+        profileImageInput.accept = "image/*";
+        profileImageInput.hidden = true;
+        profileImageInput.addEventListener("change", (event) => {
+            const input = event?.target;
+            const targetEmployee = state.employees.find((entry) => entry.id === employee.id);
+            if (!input || !targetEmployee) {
+                return;
+            }
+            const file = input.files?.[0];
+            if (!file) {
+                return;
+            }
+            if (!file.type.startsWith("image/")) {
+                window.alert("Please select a valid image file for profile picture.");
+                input.value = "";
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = () => {
+                targetEmployee.profileImage = normalizeEmployeeProfileImage(`${reader.result || ""}`);
+                saveState();
+                renderEmployeeNamesSettingsList();
+                render();
+            };
+            reader.readAsDataURL(file);
+            input.value = "";
+        });
+
+        const openProfilePicker = () => {
+            profileImageInput.click();
+        };
+        avatar.addEventListener("click", openProfilePicker);
+        avatar.addEventListener("keydown", (event) => {
+            if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                openProfilePicker();
+            }
+        });
 
         const nameInput = document.createElement("input");
         nameInput.className = "input-field";
@@ -2414,6 +2476,7 @@ function renderEmployeeNamesSettingsList() {
         });
 
         fields.appendChild(nameField);
+        fields.appendChild(profileImageInput);
         fields.appendChild(employeeIdInput);
         fields.appendChild(employeeEmailInput);
         fields.appendChild(jobLevelInput);
@@ -5333,8 +5396,7 @@ function getEmployeeCreditBalance(employee) {
             return;
         }
         if (shouldCountRowTowardWfhCredit(employee, row)) {
-            const date = parseDateValue(row.dateValue);
-            const weekKey = `${date.getFullYear()}-${date.getMonth() + 1}-${getWeekNumber(row.dateValue)}`;
+            const weekKey = getWfhCreditCycleKey(row.dateValue);
             if (!weeklyGroups[weekKey]) {
                 weeklyGroups[weekKey] = {
                     count: 0,
@@ -5368,8 +5430,7 @@ function reconcileUsedCreditsAfterEligibilityChange(employee) {
             return;
         }
         if (shouldCountRowTowardWfhCredit(employee, row)) {
-            const date = parseDateValue(row.dateValue);
-            const weekKey = `${date.getFullYear()}-${date.getMonth() + 1}-${getWeekNumber(row.dateValue)}`;
+            const weekKey = getWfhCreditCycleKey(row.dateValue);
             if (!weeklyGroups[weekKey]) {
                 weeklyGroups[weekKey] = {
                     count: 0,
@@ -7473,8 +7534,11 @@ function renderTable() {
         wfoWaveSelect.className = "select-field";
         const shouldShowChangeSchedule = displaySetup === "WFO" || row.wfoWave === "Change Schedule";
         const waveOptions = shouldShowChangeSchedule
-            ? ["", "Justified", "Change Schedule", "Use WFH Credit"]
-            : ["", "Justified", "Use WFH Credit"];
+            ? ["", "Justified", "Change Schedule"]
+            : ["", "Justified"];
+        if (displaySetup !== "WFH") {
+            waveOptions.push("Use WFH Credit");
+        }
         waveOptions.forEach((optionValue) => {
             const option = document.createElement("option");
             option.value = optionValue;
