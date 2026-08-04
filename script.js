@@ -498,6 +498,35 @@ let manualWfhPendingRowId = "";
 let activeBulkActionType = "";
 let reportPreviewMode = "workSetup";
 let selectedAdminAccountId = "";
+const WORK_SETUP_TABLE_HEADERS = [
+    "Task",
+    "Employee",
+    "Week",
+    "Year",
+    "Month",
+    "Date",
+    "Day",
+    "Processing Time",
+    "Accuracy",
+    "Leave Type",
+    "Work Setup",
+    "WFO Waive",
+    "Change Schedule Month",
+    "Change Schedule Date",
+    "Actions",
+];
+function createSpreadsheetSelectionBucket() {
+    return {
+        rows: new Set(),
+        cols: new Set(),
+        cells: new Set(),
+    };
+}
+
+const spreadsheetSelectionState = {
+    workSetup: createSpreadsheetSelectionBucket(),
+    workSchedule: createSpreadsheetSelectionBucket(),
+};
 const WFH_CREDIT_LEAVE_OPTIONS = ["OFF", "ML", "PL", "TL", "VL", "PH", "TH"];
 const WFH_UNAPPROVED_LEAVE_VALUES = new Set(WFH_CREDIT_LEAVE_OPTIONS);
 const DASHBOARD_METRIC_DEFINITIONS = [
@@ -782,6 +811,257 @@ function addDays(dateValue, days) {
     const date = parseDateValue(dateValue);
     date.setDate(date.getDate() + days);
     return formatDateValue(date);
+}
+
+function getSpreadsheetColumnLabel(columnNumber) {
+    let value = Number(columnNumber) || 0;
+    if (value < 1) {
+        return "";
+    }
+    let label = "";
+    while (value > 0) {
+        const remainder = (value - 1) % 26;
+        label = String.fromCharCode(65 + remainder) + label;
+        value = Math.floor((value - 1) / 26);
+    }
+    return label;
+}
+
+function renderSpreadsheetHeaderRows(columnLettersRow, headerRow, dataHeaders) {
+    if (!columnLettersRow || !headerRow) {
+        return;
+    }
+
+    const normalizedHeaders = Array.isArray(dataHeaders) ? dataHeaders : [];
+    columnLettersRow.className = "sheet-column-letters-row";
+    headerRow.className = "sheet-main-header-row";
+    columnLettersRow.innerHTML = "";
+    headerRow.innerHTML = "";
+
+    const cornerCell = document.createElement("th");
+    cornerCell.className = "sheet-corner-cell";
+    columnLettersRow.appendChild(cornerCell);
+
+    const rowNumberHeader = document.createElement("th");
+    rowNumberHeader.className = "sheet-row-number-header";
+    rowNumberHeader.textContent = "#";
+    headerRow.appendChild(rowNumberHeader);
+
+    normalizedHeaders.forEach((label, index) => {
+        const colIndex = index + 1;
+
+        const letterCell = document.createElement("th");
+        letterCell.className = "sheet-col-letter";
+        letterCell.dataset.sheetColIndex = String(colIndex);
+        letterCell.textContent = getSpreadsheetColumnLabel(colIndex);
+        columnLettersRow.appendChild(letterCell);
+
+        const headerCell = document.createElement("th");
+        headerCell.className = "sheet-header-label";
+        headerCell.dataset.sheetColIndex = String(colIndex);
+        headerCell.textContent = label;
+        headerRow.appendChild(headerCell);
+    });
+}
+
+function getSpreadsheetTableElement(tableKey) {
+    if (tableKey === "workSchedule") {
+        return document.getElementById("workScheduleTable");
+    }
+    return document.getElementById("workSetupTable");
+}
+
+function getSpreadsheetSelectionBucket(tableKey) {
+    const existing = spreadsheetSelectionState[tableKey];
+    if (
+        existing
+        && existing.rows instanceof Set
+        && existing.cols instanceof Set
+        && existing.cells instanceof Set
+    ) {
+        return existing;
+    }
+
+    const bucket = createSpreadsheetSelectionBucket();
+    spreadsheetSelectionState[tableKey] = bucket;
+    return bucket;
+}
+
+function clearSpreadsheetSelectionClasses(tableElement) {
+    if (!tableElement) {
+        return;
+    }
+    tableElement.querySelectorAll(
+        ".sheet-selected-cell, .sheet-selected-col, .sheet-selected-row, .sheet-selected-col-header, .sheet-selected-row-header",
+    ).forEach((element) => {
+        element.classList.remove(
+            "sheet-selected-cell",
+            "sheet-selected-col",
+            "sheet-selected-row",
+            "sheet-selected-col-header",
+            "sheet-selected-row-header",
+        );
+    });
+}
+
+function applySpreadsheetSelection(tableKey) {
+    const tableElement = getSpreadsheetTableElement(tableKey);
+    if (!tableElement) {
+        return;
+    }
+    clearSpreadsheetSelectionClasses(tableElement);
+
+    const selection = getSpreadsheetSelectionBucket(tableKey);
+    if (!selection.rows.size && !selection.cols.size && !selection.cells.size) {
+        return;
+    }
+
+    selection.cols.forEach((colIndex) => {
+        tableElement.querySelectorAll(`tbody td.sheet-cell[data-sheet-col-index=\"${colIndex}\"]`).forEach((cell) => {
+            cell.classList.add("sheet-selected-col");
+        });
+        tableElement.querySelectorAll(`thead th.sheet-col-letter[data-sheet-col-index=\"${colIndex}\"], thead th.sheet-header-label[data-sheet-col-index=\"${colIndex}\"]`).forEach((cell) => {
+            cell.classList.add("sheet-selected-col-header");
+        });
+    });
+
+    selection.rows.forEach((rowIndex) => {
+        const row = tableElement.querySelector(`tbody tr[data-sheet-row-index=\"${rowIndex}\"]`);
+        if (!row) {
+            return;
+        }
+        row.querySelectorAll("td.sheet-cell").forEach((cell) => {
+            cell.classList.add("sheet-selected-row");
+        });
+        const rowHeader = row.querySelector("td.sheet-row-number");
+        if (rowHeader) {
+            rowHeader.classList.add("sheet-selected-row-header");
+        }
+    });
+
+    selection.cells.forEach((cellKey) => {
+        const [rowIndex, colIndex] = `${cellKey}`.split(":");
+        const cell = tableElement.querySelector(`tbody tr[data-sheet-row-index=\"${rowIndex}\"] td.sheet-cell[data-sheet-col-index=\"${colIndex}\"]`);
+        const rowHeader = tableElement.querySelector(`tbody td.sheet-row-number[data-sheet-row-index=\"${rowIndex}\"]`);
+        const colHeader = tableElement.querySelector(`thead th.sheet-col-letter[data-sheet-col-index=\"${colIndex}\"]`);
+        const labelHeader = tableElement.querySelector(`thead th.sheet-header-label[data-sheet-col-index=\"${colIndex}\"]`);
+        if (cell) {
+            cell.classList.add("sheet-selected-cell");
+        }
+        if (rowHeader) {
+            rowHeader.classList.add("sheet-selected-row-header");
+        }
+        if (colHeader) {
+            colHeader.classList.add("sheet-selected-col-header");
+        }
+        if (labelHeader) {
+            labelHeader.classList.add("sheet-selected-col-header");
+        }
+    });
+}
+
+function toggleSpreadsheetSelection(tableKey, type, payload) {
+    const selection = getSpreadsheetSelectionBucket(tableKey);
+
+    if (type === "clear") {
+        selection.rows.clear();
+        selection.cols.clear();
+        selection.cells.clear();
+        applySpreadsheetSelection(tableKey);
+        return;
+    }
+
+    if (type === "row") {
+        const rowIndex = Number(payload?.rowIndex) || 0;
+        if (rowIndex < 1) {
+            return;
+        }
+        const key = String(rowIndex);
+        if (selection.rows.has(key)) {
+            selection.rows.delete(key);
+        } else {
+            selection.rows.add(key);
+        }
+        applySpreadsheetSelection(tableKey);
+        return;
+    }
+
+    if (type === "col") {
+        const colIndex = Number(payload?.colIndex) || 0;
+        if (colIndex < 1) {
+            return;
+        }
+        const key = String(colIndex);
+        if (selection.cols.has(key)) {
+            selection.cols.delete(key);
+        } else {
+            selection.cols.add(key);
+        }
+        applySpreadsheetSelection(tableKey);
+        return;
+    }
+
+    if (type === "cell") {
+        const rowIndex = Number(payload?.rowIndex) || 0;
+        const colIndex = Number(payload?.colIndex) || 0;
+        if (rowIndex < 1 || colIndex < 1) {
+            return;
+        }
+        const key = `${rowIndex}:${colIndex}`;
+        if (selection.cells.has(key)) {
+            selection.cells.delete(key);
+        } else {
+            selection.cells.add(key);
+        }
+    }
+
+    applySpreadsheetSelection(tableKey);
+}
+
+function bindSpreadsheetTableInteractions(tableKey) {
+    const tableElement = getSpreadsheetTableElement(tableKey);
+    if (!tableElement || tableElement.dataset.spreadsheetBound === "true") {
+        return;
+    }
+
+    tableElement.dataset.spreadsheetBound = "true";
+    tableElement.addEventListener("click", (event) => {
+        const target = event.target;
+        if (!(target instanceof Element)) {
+            return;
+        }
+
+        const cornerCell = target.closest("thead th.sheet-corner-cell");
+        if (cornerCell && tableElement.contains(cornerCell)) {
+            toggleSpreadsheetSelection(tableKey, "clear");
+            return;
+        }
+
+        const colHeader = target.closest("thead th.sheet-col-letter");
+        if (colHeader && tableElement.contains(colHeader)) {
+            toggleSpreadsheetSelection(tableKey, "col", {
+                colIndex: Number(colHeader.dataset.sheetColIndex) || 0,
+            });
+            return;
+        }
+
+        const rowHeader = target.closest("tbody td.sheet-row-number");
+        if (rowHeader && tableElement.contains(rowHeader)) {
+            toggleSpreadsheetSelection(tableKey, "row", {
+                rowIndex: Number(rowHeader.dataset.sheetRowIndex) || 0,
+            });
+            return;
+        }
+
+        const dataCell = target.closest("tbody td.sheet-cell");
+        if (dataCell && tableElement.contains(dataCell)) {
+            const rowElement = dataCell.closest("tr");
+            toggleSpreadsheetSelection(tableKey, "cell", {
+                rowIndex: Number(rowElement?.dataset.sheetRowIndex) || 0,
+                colIndex: Number(dataCell.dataset.sheetColIndex) || 0,
+            });
+        }
+    });
 }
 
 function parseDurationToSeconds(value) {
@@ -3747,9 +4027,11 @@ function setWorkScheduleZoomPercent(nextPercent) {
 }
 
 function renderWorkScheduleTable() {
+    const table = document.getElementById("workScheduleTable");
+    const columnLettersRow = document.getElementById("workScheduleColumnLettersRow");
     const headerRow = document.getElementById("workScheduleHeadRow");
     const body = document.getElementById("workScheduleBody");
-    if (!headerRow || !body) {
+    if (!table || !columnLettersRow || !headerRow || !body) {
         return;
     }
 
@@ -3761,17 +4043,14 @@ function renderWorkScheduleTable() {
         "Job Level",
         "Task",
     ];
-    headerRow.innerHTML = "";
-    staticHeaders.forEach((label) => {
-        const th = document.createElement("th");
-        th.textContent = label;
-        headerRow.appendChild(th);
-    });
-    dateValues.forEach((dateValue) => {
-        const th = document.createElement("th");
-        th.textContent = formatDayFilterLabel(dateValue);
-        headerRow.appendChild(th);
-    });
+    renderSpreadsheetHeaderRows(
+        columnLettersRow,
+        headerRow,
+        [
+            ...staticHeaders,
+            ...dateValues.map((dateValue) => formatDayFilterLabel(dateValue)),
+        ],
+    );
 
     body.innerHTML = "";
     const selectedSubtrade = `${state.selectedSubtrade || "all"}`.trim() || "all";
@@ -3785,19 +4064,21 @@ function renderWorkScheduleTable() {
     if (!employees.length || !dateValues.length) {
         const emptyRow = document.createElement("tr");
         const emptyCell = document.createElement("td");
-        emptyCell.colSpan = staticHeaders.length + Math.max(1, dateValues.length);
+        emptyCell.colSpan = staticHeaders.length + Math.max(1, dateValues.length) + 1;
         emptyCell.textContent = !employees.length
             ? "No employees available for selected filters."
             : "No Work Schedule dates found. Add dates from Settings > Work Schedule Dates.";
         emptyRow.appendChild(emptyCell);
         body.appendChild(emptyRow);
         applyWorkScheduleZoom();
+        bindSpreadsheetTableInteractions("workSchedule");
+        applySpreadsheetSelection("workSchedule");
         return;
     }
 
     const assignmentMap = buildWorkScheduleAssignmentMap();
 
-    employees.forEach((employee) => {
+    employees.forEach((employee, rowIndex) => {
         const tr = document.createElement("tr");
         [
             employee.name,
@@ -3937,10 +4218,26 @@ function renderWorkScheduleTable() {
             tr.appendChild(td);
         });
 
+        tr.dataset.sheetRowIndex = String(rowIndex + 1);
+        const rowNumberCell = document.createElement("td");
+        rowNumberCell.className = "sheet-row-number";
+        rowNumberCell.dataset.sheetRowIndex = String(rowIndex + 1);
+        rowNumberCell.textContent = String(rowIndex + 1);
+        tr.prepend(rowNumberCell);
+        Array.from(tr.cells).forEach((cell, cellIndex) => {
+            if (cellIndex === 0) {
+                return;
+            }
+            cell.classList.add("sheet-cell");
+            cell.dataset.sheetColIndex = String(cellIndex);
+        });
+
         body.appendChild(tr);
     });
 
     applyWorkScheduleZoom();
+    bindSpreadsheetTableInteractions("workSchedule");
+    applySpreadsheetSelection("workSchedule");
 }
 
 function getWfoReasons(row, employee) {
@@ -7301,8 +7598,11 @@ function renderTabs() {
 }
 
 function renderTable() {
+    const columnLettersRow = document.getElementById("workSetupColumnLettersRow");
+    const headerRow = document.getElementById("workSetupHeadRow");
     const body = document.getElementById("scheduleBody");
     const activeLabel = document.getElementById("activeTabLabel");
+    renderSpreadsheetHeaderRows(columnLettersRow, headerRow, WORK_SETUP_TABLE_HEADERS);
     const rows = getVisibleRows();
     body.innerHTML = "";
     activeLabel.textContent = activeTab === "all" ? "Work Setup" : (state.employees.find((entry) => entry.id === activeTab)?.name || "Employee");
@@ -7310,15 +7610,17 @@ function renderTable() {
     if (!rows.length) {
         const emptyRow = document.createElement("tr");
         const emptyCell = document.createElement("td");
-        emptyCell.colSpan = 15;
+        emptyCell.colSpan = WORK_SETUP_TABLE_HEADERS.length + 1;
         emptyCell.textContent = "No rows found for the selected year, month, week, and task.";
         emptyRow.appendChild(emptyCell);
         body.appendChild(emptyRow);
         applyWorkSetupZoom();
+        bindSpreadsheetTableInteractions("workSetup");
+        applySpreadsheetSelection("workSetup");
         return;
     }
 
-    rows.forEach((row) => {
+    rows.forEach((row, rowIndex) => {
         const employee = state.employees.find((entry) => entry.id === row.employeeId);
         const displaySetup = getDisplayWorkSetup(row, employee);
         const workSetupClassName = getWorkSetupClass(row, employee);
@@ -7691,10 +7993,26 @@ function renderTable() {
         actionsCell.appendChild(deleteButton);
         tr.appendChild(actionsCell);
 
+        tr.dataset.sheetRowIndex = String(rowIndex + 1);
+        const rowNumberCell = document.createElement("td");
+        rowNumberCell.className = "sheet-row-number";
+        rowNumberCell.dataset.sheetRowIndex = String(rowIndex + 1);
+        rowNumberCell.textContent = String(rowIndex + 1);
+        tr.prepend(rowNumberCell);
+        Array.from(tr.cells).forEach((cell, cellIndex) => {
+            if (cellIndex === 0) {
+                return;
+            }
+            cell.classList.add("sheet-cell");
+            cell.dataset.sheetColIndex = String(cellIndex);
+        });
+
         body.appendChild(tr);
     });
 
     applyWorkSetupZoom();
+    bindSpreadsheetTableInteractions("workSetup");
+    applySpreadsheetSelection("workSetup");
 }
 
 function buildOverviewSeries(rows) {
