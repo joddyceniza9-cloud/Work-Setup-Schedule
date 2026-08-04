@@ -495,6 +495,7 @@ let manualWfoPendingEmployeeId = "";
 let manualWfoPendingRowId = "";
 let manualWfhPendingEmployeeId = "";
 let manualWfhPendingRowId = "";
+let activeBulkActionType = "";
 let reportPreviewMode = "workSetup";
 let selectedAdminAccountId = "";
 const WFH_CREDIT_LEAVE_OPTIONS = ["OFF", "ML", "PL", "TL", "VL", "PH", "TH"];
@@ -513,6 +514,17 @@ const DASHBOARD_METRIC_DEFINITIONS = [
     { key: "wfhCreditsAvailed", label: "WFH Credits Availed", color: "#64748b", tone: "neutral" },
     { key: "wfhCreditStatus", label: "WFH Credit Status", color: "#0f766e", tone: "good" },
 ];
+const BULK_ACTION_CONFIG = {
+    manualWfo: { label: "Manual WFO", requiresRemarks: true, remarksLabel: "Reason for WFO Ongoing" },
+    manualWfh: { label: "Manual WFH", requiresRemarks: true, remarksLabel: "Reason for WFH" },
+    undoManual: { label: "Undo Manual", requiresRemarks: false, remarksLabel: "" },
+    changeSchedule: { label: "Change Schedule", requiresRemarks: true, remarksLabel: "Reason for Change Schedule" },
+    useCredit: { label: "Use Credit", requiresRemarks: false, remarksLabel: "" },
+    wfoDone: { label: "(WFO) Done", requiresRemarks: false, remarksLabel: "" },
+    wfoUndo: { label: "(WFO) Undo", requiresRemarks: false, remarksLabel: "" },
+    removeWorkSetup: { label: "Remove Work Setup", requiresRemarks: false, remarksLabel: "" },
+    undoWorkSetup: { label: "Undo Work Setup", requiresRemarks: false, remarksLabel: "" },
+};
 let pendingHardResetUserId = "";
 
 function normalizeDashboardMetricFilterKeys(values) {
@@ -637,6 +649,7 @@ function createDefaultState() {
         dashboardMetricFilterKeys: [],
         dashboardContributorEmployeeIds: [],
         leaveTypeColors: getDefaultLeaveTypeColors(),
+        workSetupZoomPercent: 100,
         workScheduleZoomPercent: 100,
         dashboardSectionOpen: {
             overview: false,
@@ -1334,6 +1347,7 @@ function normalizeState(saved) {
     const isLegacyWorkShiftPreset = workShiftOptions.length
         && workShiftOptions.every((entry) => entry.name === entry.schedule)
         && workShiftOptions.every((entry) => ["WFO Day", "WFH", "OFF"].includes(entry.name));
+    const workSetupZoomPercent = Math.max(60, Math.min(200, Number(saved.workSetupZoomPercent) || 100));
     const workScheduleZoomPercent = Math.max(60, Math.min(200, Number(saved.workScheduleZoomPercent) || 100));
     const leaveTypeColors = normalizeLeaveTypeColors(saved.leaveTypeColors, fallback.leaveTypeColors);
     const dashboardSectionOpen = normalizeDashboardSectionState(saved.dashboardSectionOpen, fallback.dashboardSectionOpen);
@@ -1363,6 +1377,7 @@ function normalizeState(saved) {
         dashboardMetricFilterKeys,
         dashboardContributorEmployeeIds,
         leaveTypeColors,
+        workSetupZoomPercent,
         workScheduleZoomPercent,
         rememberedWeeksByMonthKey,
         dashboardSectionOpen,
@@ -3628,6 +3643,28 @@ function getWorkScheduleZoomPercent() {
     return Math.max(60, Math.min(200, Number(state.workScheduleZoomPercent) || 100));
 }
 
+function getWorkSetupZoomPercent() {
+    return Math.max(60, Math.min(200, Number(state.workSetupZoomPercent) || 100));
+}
+
+function applyWorkSetupZoom() {
+    const table = document.querySelector("#scheduleView .table-wrap table:not(.work-schedule-table)");
+    const label = document.getElementById("workSetupZoomLabel");
+    const percent = getWorkSetupZoomPercent();
+    if (table) {
+        table.style.zoom = `${percent}%`;
+    }
+    if (label) {
+        label.textContent = `${percent}%`;
+    }
+}
+
+function setWorkSetupZoomPercent(nextPercent) {
+    state.workSetupZoomPercent = Math.max(60, Math.min(200, Number(nextPercent) || 100));
+    saveState();
+    applyWorkSetupZoom();
+}
+
 function applyWorkScheduleZoom() {
     const table = document.querySelector(".work-schedule-table");
     const label = document.getElementById("workScheduleZoomLabel");
@@ -4735,6 +4772,545 @@ function confirmManualWfo() {
     }
 
     closeManualWfoModal();
+}
+
+function getBulkActionConfig(actionType) {
+    return BULK_ACTION_CONFIG[actionType] || null;
+}
+
+function formatBulkActionDate(dateValue) {
+    const date = parseDateValue(dateValue);
+    return date.toLocaleDateString("en-US", {
+        month: "long",
+        day: "numeric",
+        year: "numeric",
+    });
+}
+
+function formatBulkActionDateListLabel(dateValue) {
+    const date = parseDateValue(dateValue);
+    return `${monthNames[date.getMonth()]} / ${date.getDate()} / ${date.getFullYear()}`;
+}
+
+function closeBulkActionsMenu() {
+    const menu = document.getElementById("bulkActionsMenu");
+    const button = document.getElementById("bulkActionsBtn");
+    if (!menu || !button) {
+        return;
+    }
+    menu.classList.add("hidden");
+    button.setAttribute("aria-expanded", "false");
+}
+
+function toggleBulkActionsMenu() {
+    const menu = document.getElementById("bulkActionsMenu");
+    const button = document.getElementById("bulkActionsBtn");
+    if (!menu || !button) {
+        return;
+    }
+    const isHidden = menu.classList.contains("hidden");
+    menu.classList.toggle("hidden", !isHidden);
+    button.setAttribute("aria-expanded", isHidden ? "true" : "false");
+}
+
+function getBulkActionScopedEntries() {
+    const visibleRows = getVisibleRows();
+    const entries = visibleRows.map((visibleRow) => {
+        const employee = state.employees.find((entry) => entry.id === visibleRow.employeeId);
+        if (!employee) {
+            return null;
+        }
+        const row = employee.rows.find((entry) => entry.id === visibleRow.id);
+        if (!row) {
+            return null;
+        }
+        return {
+            employee,
+            row,
+            dateValue: row.dateValue,
+        };
+    }).filter((entry) => Boolean(entry));
+
+    entries.sort((left, right) => {
+        const dateDiff = parseDateValue(left.dateValue) - parseDateValue(right.dateValue);
+        if (dateDiff !== 0) {
+            return dateDiff;
+        }
+        return left.employee.name.localeCompare(right.employee.name);
+    });
+    return entries;
+}
+
+function evaluateBulkActionEntry(actionType, employee, row) {
+    const displaySetup = getDisplayWorkSetup(row, employee);
+    const dateText = formatBulkActionDate(row.dateValue);
+    const employeeName = employee?.name || "Employee";
+
+    if (!employee || !row) {
+        return {
+            canApply: false,
+            message: `${employeeName} has no matching row for the selected date.`,
+        };
+    }
+
+    if (actionType === "manualWfo") {
+        if (displaySetup === "WFO" && !row.wfoDone) {
+            return {
+                canApply: false,
+                message: `${employeeName} is already on WFO Ongoing for the date ${dateText}.`,
+            };
+        }
+        if (displaySetup === "WFO" && row.wfoDone) {
+            return {
+                canApply: false,
+                message: `${employeeName} is already on WFO Done for the date ${dateText}.`,
+            };
+        }
+        if (displaySetup !== "WFH") {
+            return {
+                canApply: false,
+                message: `${employeeName} is not on WFH for the date ${dateText}.`,
+            };
+        }
+        return { canApply: true, message: "" };
+    }
+
+    if (actionType === "manualWfh") {
+        if (displaySetup !== "WFO") {
+            return {
+                canApply: false,
+                message: `${employeeName} is not on WFO Ongoing for the date ${dateText}.`,
+            };
+        }
+        if (row.wfoDone) {
+            return {
+                canApply: false,
+                message: `${employeeName} is already on WFO Done for the date ${dateText}.`,
+            };
+        }
+        return { canApply: true, message: "" };
+    }
+
+    if (actionType === "undoManual") {
+        if (!row.manualWfo && !row.manualWfh) {
+            return {
+                canApply: false,
+                message: `${employeeName} has no Manual WFO/WFH override on the date ${dateText}.`,
+            };
+        }
+        return { canApply: true, message: "" };
+    }
+
+    if (actionType === "changeSchedule") {
+        if (displaySetup !== "WFO") {
+            return {
+                canApply: false,
+                message: `${employeeName} is not on WFO for the date ${dateText}.`,
+            };
+        }
+        if (row.wfoWave === "Change Schedule") {
+            return {
+                canApply: false,
+                message: `${employeeName} is already tagged as Change Schedule for the date ${dateText}.`,
+            };
+        }
+        return { canApply: true, message: "" };
+    }
+
+    if (actionType === "useCredit") {
+        const balance = getEmployeeCreditBalance(employee);
+        if (balance <= 0) {
+            return {
+                canApply: false,
+                message: `${employeeName} does not have any WFH Credit points available.`,
+            };
+        }
+        if (displaySetup !== "WFO") {
+            return {
+                canApply: false,
+                message: `${employeeName} is not on WFO for the date ${dateText}.`,
+            };
+        }
+        if (row.wfoWave === "Use WFH Credit" || row.creditUsed) {
+            return {
+                canApply: false,
+                message: `${employeeName} already used WFH Credit for the date ${dateText}.`,
+            };
+        }
+        return { canApply: true, message: "" };
+    }
+
+    if (actionType === "wfoDone") {
+        if (displaySetup !== "WFO") {
+            return {
+                canApply: false,
+                message: `${employeeName} is not on WFO for the date ${dateText}.`,
+            };
+        }
+        if (row.wfoDone) {
+            return {
+                canApply: false,
+                message: `${employeeName} is already on WFO Done for the date ${dateText}.`,
+            };
+        }
+        return { canApply: true, message: "" };
+    }
+
+    if (actionType === "wfoUndo") {
+        if (displaySetup !== "WFO") {
+            return {
+                canApply: false,
+                message: `${employeeName} is not on WFO for the date ${dateText}.`,
+            };
+        }
+        if (!row.wfoDone) {
+            return {
+                canApply: false,
+                message: `${employeeName} is still on WFO Ongoing for the date ${dateText}.`,
+            };
+        }
+        return { canApply: true, message: "" };
+    }
+
+    if (actionType === "removeWorkSetup") {
+        if (row.workSetupRemoved) {
+            return {
+                canApply: false,
+                message: `${employeeName} already has removed Work Setup for the date ${dateText}.`,
+            };
+        }
+        if (!displaySetup) {
+            return {
+                canApply: false,
+                message: `${employeeName} has no Work Setup to remove for the date ${dateText}.`,
+            };
+        }
+        if (displaySetup === "WFO" && !row.wfoDone) {
+            return {
+                canApply: false,
+                message: `${employeeName} is on WFO Ongoing for the date ${dateText}. Please move WFO first before removing Work Setup.`,
+            };
+        }
+        return { canApply: true, message: "" };
+    }
+
+    if (actionType === "undoWorkSetup") {
+        if (!row.workSetupRemoved) {
+            return {
+                canApply: false,
+                message: `${employeeName} has no removed Work Setup to undo for the date ${dateText}.`,
+            };
+        }
+        return { canApply: true, message: "" };
+    }
+
+    return { canApply: false, message: "Unsupported bulk action." };
+}
+
+function renderBulkActionDateList() {
+    const list = document.getElementById("bulkActionDateList");
+    if (!list) {
+        return;
+    }
+    list.innerHTML = "";
+
+    const actionType = activeBulkActionType;
+    if (!getBulkActionConfig(actionType)) {
+        list.innerHTML = '<p class="help-text">Select a bulk action first.</p>';
+        return;
+    }
+
+    const entries = getBulkActionScopedEntries();
+    const eligibleDates = Array.from(new Set(entries
+        .filter((entry) => evaluateBulkActionEntry(actionType, entry.employee, entry.row).canApply)
+        .map((entry) => entry.dateValue)));
+
+    appendSelectionGridBulkActions(list, {
+        selectAllLabel: "Select All",
+        clearAllLabel: "Unselect All",
+        onChange: () => {
+            renderBulkActionEmployeeList();
+            updateBulkActionSystemAlerts();
+        },
+    });
+
+    if (!eligibleDates.length) {
+        const empty = document.createElement("p");
+        empty.className = "help-text";
+        empty.textContent = "No available dates for this action based on current filters.";
+        list.appendChild(empty);
+        return;
+    }
+
+    eligibleDates
+        .sort((left, right) => parseDateValue(left) - parseDateValue(right))
+        .forEach((dateValue) => {
+            const label = document.createElement("label");
+            label.className = "checkbox-row";
+            const input = document.createElement("input");
+            input.type = "checkbox";
+            input.value = dateValue;
+            label.appendChild(input);
+            label.appendChild(document.createTextNode(formatBulkActionDateListLabel(dateValue)));
+            list.appendChild(label);
+        });
+}
+
+function getSelectedBulkActionDates() {
+    return Array.from(document.querySelectorAll("#bulkActionDateList input:checked"))
+        .map((input) => `${input.value || ""}`.trim())
+        .filter((value) => Boolean(value));
+}
+
+function renderBulkActionEmployeeList() {
+    const list = document.getElementById("bulkActionEmployeeList");
+    if (!list) {
+        return;
+    }
+    list.innerHTML = "";
+
+    const selectedDates = getSelectedBulkActionDates();
+    appendSelectionGridBulkActions(list, {
+        selectAllLabel: "Select All",
+        clearAllLabel: "Unselect All",
+        onChange: updateBulkActionSystemAlerts,
+    });
+
+    if (!selectedDates.length) {
+        const empty = document.createElement("p");
+        empty.className = "help-text";
+        empty.textContent = "Select one or more dates first.";
+        list.appendChild(empty);
+        return;
+    }
+
+    const selectedDateSet = new Set(selectedDates);
+    const entries = getBulkActionScopedEntries().filter((entry) => selectedDateSet.has(entry.dateValue));
+    if (!entries.length) {
+        const empty = document.createElement("p");
+        empty.className = "help-text";
+        empty.textContent = "No employees found for selected date(s).";
+        list.appendChild(empty);
+        return;
+    }
+
+    const showDateInLabel = selectedDates.length > 1;
+    entries.forEach((entry) => {
+        const label = document.createElement("label");
+        label.className = "checkbox-row";
+        const input = document.createElement("input");
+        input.type = "checkbox";
+        input.value = `${entry.employee.id}::${entry.row.dateValue}`;
+        label.appendChild(input);
+        label.appendChild(document.createTextNode(showDateInLabel
+            ? `${entry.employee.name} (${formatBulkActionDateListLabel(entry.row.dateValue)})`
+            : entry.employee.name));
+        list.appendChild(label);
+    });
+}
+
+function updateBulkActionSystemAlerts(customMessages = null) {
+    const alertBox = document.getElementById("bulkActionSystemAlert");
+    if (!alertBox) {
+        return;
+    }
+
+    if (Array.isArray(customMessages)) {
+        const text = customMessages.length ? customMessages.join("\n") : "";
+        alertBox.value = text;
+        alertBox.placeholder = text ? "" : "No system alerts.";
+        return;
+    }
+
+    const actionType = activeBulkActionType;
+    const selectedItems = Array.from(document.querySelectorAll("#bulkActionEmployeeList input:checked"));
+    const alertMessages = [];
+
+    selectedItems.forEach((input) => {
+        const [employeeId, dateValue] = `${input.value || ""}`.split("::");
+        const employee = state.employees.find((entry) => entry.id === employeeId);
+        const row = employee?.rows.find((entry) => entry.dateValue === dateValue);
+        if (!employee || !row) {
+            return;
+        }
+        const validation = evaluateBulkActionEntry(actionType, employee, row);
+        if (!validation.canApply && validation.message) {
+            alertMessages.push(validation.message);
+        }
+    });
+
+    const uniqueMessages = Array.from(new Set(alertMessages));
+    alertBox.value = uniqueMessages.join("\n");
+    alertBox.placeholder = uniqueMessages.length ? "" : "No system alerts.";
+}
+
+function closeBulkActionModal() {
+    const modal = document.getElementById("bulkActionModal");
+    const feedback = document.getElementById("bulkActionFeedback");
+    const remarksInput = document.getElementById("bulkActionRemarksInput");
+    if (!modal || !feedback || !remarksInput) {
+        return;
+    }
+
+    modal.classList.add("hidden");
+    modal.setAttribute("aria-hidden", "true");
+    activeBulkActionType = "";
+    feedback.textContent = "Select date(s) and employee(s) to apply.";
+    delete feedback.dataset.tone;
+    remarksInput.value = "";
+    updateBulkActionSystemAlerts([]);
+    closeBulkActionsMenu();
+}
+
+function openBulkActionModal(actionType) {
+    if (!requireLoggedInUser()) {
+        return;
+    }
+    const config = getBulkActionConfig(actionType);
+    const modal = document.getElementById("bulkActionModal");
+    const title = document.getElementById("bulkActionModalTitle");
+    const feedback = document.getElementById("bulkActionFeedback");
+    const remarksField = document.getElementById("bulkActionRemarksField");
+    const remarksLabel = document.getElementById("bulkActionRemarksLabel");
+    const remarksInput = document.getElementById("bulkActionRemarksInput");
+
+    if (!config || !modal || !title || !feedback || !remarksField || !remarksLabel || !remarksInput) {
+        return;
+    }
+
+    activeBulkActionType = actionType;
+    title.textContent = `Add Quick (${config.label})`;
+    feedback.textContent = `Select date(s) and employee(s) for ${config.label}.`;
+    delete feedback.dataset.tone;
+    remarksInput.value = "";
+
+    if (config.requiresRemarks) {
+        remarksField.classList.remove("hidden");
+        remarksField.style.display = "flex";
+        remarksLabel.textContent = config.remarksLabel;
+    } else {
+        remarksField.classList.add("hidden");
+        remarksField.style.display = "none";
+        remarksInput.value = "";
+    }
+
+    renderBulkActionDateList();
+    renderBulkActionEmployeeList();
+    updateBulkActionSystemAlerts();
+
+    modal.classList.remove("hidden");
+    modal.setAttribute("aria-hidden", "false");
+}
+
+function applySingleBulkAction(actionType, employeeId, rowId, remarks) {
+    if (actionType === "manualWfo") {
+        return setManualWfo(employeeId, rowId, remarks);
+    }
+    if (actionType === "manualWfh") {
+        return setManualWfh(employeeId, rowId, remarks);
+    }
+    if (actionType === "undoManual") {
+        undoManualOverride(employeeId, rowId);
+        return true;
+    }
+    if (actionType === "changeSchedule") {
+        updateRow(employeeId, rowId, "wfoWave", "Change Schedule");
+        return true;
+    }
+    if (actionType === "useCredit") {
+        updateRow(employeeId, rowId, "wfoWave", "Use WFH Credit");
+        return true;
+    }
+    if (actionType === "wfoDone") {
+        setRowWfoDone(employeeId, rowId, true);
+        return true;
+    }
+    if (actionType === "wfoUndo") {
+        setRowWfoDone(employeeId, rowId, false);
+        return true;
+    }
+    if (actionType === "removeWorkSetup") {
+        removeRowWorkSetup(employeeId, rowId);
+        return true;
+    }
+    if (actionType === "undoWorkSetup") {
+        undoRowWorkSetup(employeeId, rowId);
+        return true;
+    }
+    return false;
+}
+
+function applyBulkAction() {
+    if (!requireLoggedInUser()) {
+        return;
+    }
+
+    const config = getBulkActionConfig(activeBulkActionType);
+    const feedback = document.getElementById("bulkActionFeedback");
+    const remarksInput = document.getElementById("bulkActionRemarksInput");
+    const selectedEntries = Array.from(document.querySelectorAll("#bulkActionEmployeeList input:checked"));
+    if (!config || !feedback || !remarksInput) {
+        return;
+    }
+
+    if (!selectedEntries.length) {
+        feedback.textContent = "Select at least one employee row to continue.";
+        feedback.dataset.tone = "error";
+        return;
+    }
+
+    const remarks = remarksInput.value.trim();
+    if (config.requiresRemarks && !remarks) {
+        feedback.textContent = "Reason is required before applying this action.";
+        feedback.dataset.tone = "error";
+        remarksInput.focus();
+        return;
+    }
+
+    let appliedCount = 0;
+    const blockedMessages = [];
+
+    selectedEntries.forEach((input) => {
+        const [employeeId, dateValue] = `${input.value || ""}`.split("::");
+        const employee = state.employees.find((entry) => entry.id === employeeId);
+        const row = employee?.rows.find((entry) => entry.dateValue === dateValue);
+        if (!employee || !row) {
+            return;
+        }
+
+        const validation = evaluateBulkActionEntry(activeBulkActionType, employee, row);
+        if (!validation.canApply) {
+            if (validation.message) {
+                blockedMessages.push(validation.message);
+            }
+            return;
+        }
+
+        const isApplied = applySingleBulkAction(activeBulkActionType, employee.id, row.id, remarks);
+        if (!isApplied) {
+            blockedMessages.push(`${employee.name} action failed for ${formatBulkActionDate(row.dateValue)}.`);
+            return;
+        }
+
+        appliedCount += 1;
+    });
+
+    const uniqueBlocked = Array.from(new Set(blockedMessages));
+    updateBulkActionSystemAlerts(uniqueBlocked);
+
+    if (!appliedCount) {
+        feedback.textContent = "No valid rows were applied. Review System Alert.";
+        feedback.dataset.tone = "error";
+    } else if (uniqueBlocked.length) {
+        feedback.textContent = `Applied to ${appliedCount} row(s). ${uniqueBlocked.length} row(s) were skipped.`;
+        feedback.dataset.tone = "warning";
+    } else {
+        feedback.textContent = `Applied to ${appliedCount} row(s) successfully.`;
+        feedback.dataset.tone = "success";
+    }
+
+    renderBulkActionDateList();
+    renderBulkActionEmployeeList();
 }
 
 function getWfoStatusLabel(row) {
@@ -6578,6 +7154,7 @@ function renderFilters() {
 function closeFilterMenus() {
     document.getElementById("monthFilterMenu").classList.add("hidden");
     document.getElementById("weekFilterMenu").classList.add("hidden");
+    closeBulkActionsMenu();
     const dayFilterMenu = document.getElementById("dayFilterMenu");
     if (dayFilterMenu) {
         dayFilterMenu.classList.add("hidden");
@@ -6676,6 +7253,7 @@ function renderTable() {
         emptyCell.textContent = "No rows found for the selected year, month, week, and task.";
         emptyRow.appendChild(emptyCell);
         body.appendChild(emptyRow);
+        applyWorkSetupZoom();
         return;
     }
 
@@ -7051,6 +7629,8 @@ function renderTable() {
 
         body.appendChild(tr);
     });
+
+    applyWorkSetupZoom();
 }
 
 function buildOverviewSeries(rows) {
@@ -9465,6 +10045,26 @@ function setupEvents() {
     document.getElementById("openAuthModalBtn").addEventListener("click", openAuthModal);
     document.getElementById("addRowBtn").addEventListener("click", addRow);
     document.getElementById("sequenceDatesBtn").addEventListener("click", sequenceCurrentMonthDates);
+    document.getElementById("bulkActionsBtn").addEventListener("click", (event) => {
+        event.stopPropagation();
+        toggleBulkActionsMenu();
+    });
+    document.getElementById("bulkActionsMenu").addEventListener("click", (event) => {
+        event.stopPropagation();
+        const button = event.target.closest("[data-bulk-action]");
+        if (!button) {
+            return;
+        }
+        openBulkActionModal(button.dataset.bulkAction);
+        closeBulkActionsMenu();
+    });
+    document.getElementById("closeBulkActionModalBtn").addEventListener("click", closeBulkActionModal);
+    document.getElementById("applyBulkActionBtn").addEventListener("click", applyBulkAction);
+    document.getElementById("bulkActionDateList").addEventListener("change", () => {
+        renderBulkActionEmployeeList();
+        updateBulkActionSystemAlerts();
+    });
+    document.getElementById("bulkActionEmployeeList").addEventListener("change", updateBulkActionSystemAlerts);
     document.getElementById("saveSettingsBtn").addEventListener("click", saveSettings);
     document.getElementById("cancelSettingsBtn").addEventListener("click", closeSettings);
     document.querySelectorAll("#settingsModal .settings-nav-row").forEach((row) => {
@@ -9499,6 +10099,12 @@ function setupEvents() {
     });
     document.getElementById("workScheduleZoomOutBtn").addEventListener("click", () => {
         setWorkScheduleZoomPercent(getWorkScheduleZoomPercent() - 10);
+    });
+    document.getElementById("workSetupZoomInBtn").addEventListener("click", () => {
+        setWorkSetupZoomPercent(getWorkSetupZoomPercent() + 10);
+    });
+    document.getElementById("workSetupZoomOutBtn").addEventListener("click", () => {
+        setWorkSetupZoomPercent(getWorkSetupZoomPercent() - 10);
     });
     document.getElementById("closeQuickScheduleBtn").addEventListener("click", closeQuickScheduleModal);
     document.getElementById("closeQuickScheduleLeaveLegendBtn").addEventListener("click", closeQuickScheduleLeaveLegendModal);
@@ -9667,6 +10273,12 @@ function setupEvents() {
     document.getElementById("manualWfhModal").addEventListener("click", (event) => {
         if (event.target.id === "manualWfhModal") {
             closeManualWfhModal();
+        }
+    });
+    document.getElementById("bulkActionModal").addEventListener("click", (event) => {
+        if (event.target.id === "bulkActionModal") {
+            // Keep Bulk Action modal open when clicking outside.
+            // Close only via the dedicated X button.
         }
     });
     document.getElementById("quickScheduleModal").addEventListener("click", (event) => {
