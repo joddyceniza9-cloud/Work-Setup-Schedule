@@ -569,42 +569,48 @@ table {
 
 .work-schedule-table th:nth-child(1),
 .work-schedule-table td:nth-child(1) {
-  min-width: 220px;
-  width: 220px;
+  min-width: 52px;
+  width: 52px;
 }
 
 .work-schedule-table th:nth-child(2),
 .work-schedule-table td:nth-child(2) {
-  min-width: 130px;
-  width: 130px;
-}
-
-.work-schedule-table th:nth-child(3),
-.work-schedule-table td:nth-child(3) {
   min-width: 220px;
   width: 220px;
 }
 
+.work-schedule-table th:nth-child(3),
+.work-schedule-table td:nth-child(3) {
+  min-width: 130px;
+  width: 130px;
+}
+
 .work-schedule-table th:nth-child(4),
 .work-schedule-table td:nth-child(4) {
-  min-width: 120px;
-  width: 120px;
+  min-width: 220px;
+  width: 220px;
 }
 
 .work-schedule-table th:nth-child(5),
 .work-schedule-table td:nth-child(5) {
+  min-width: 120px;
+  width: 120px;
+}
+
+.work-schedule-table th:nth-child(6),
+.work-schedule-table td:nth-child(6) {
   min-width: 160px;
   width: 160px;
 }
 
-.work-schedule-table th:nth-child(-n+5),
-.work-schedule-table td:nth-child(-n+5) {
+.work-schedule-table th:nth-child(-n+6),
+.work-schedule-table td:nth-child(-n+6) {
   position: sticky;
   z-index: 5;
   background: #fff;
 }
 
-.work-schedule-table th:nth-child(-n+5) {
+.work-schedule-table th:nth-child(-n+6) {
   z-index: 8;
   background: #f7f9fc;
 }
@@ -616,27 +622,32 @@ table {
 
 .work-schedule-table th:nth-child(2),
 .work-schedule-table td:nth-child(2) {
-  left: 220px;
+  left: 52px;
 }
 
 .work-schedule-table th:nth-child(3),
 .work-schedule-table td:nth-child(3) {
-  left: 350px;
+  left: 272px;
 }
 
 .work-schedule-table th:nth-child(4),
 .work-schedule-table td:nth-child(4) {
-  left: 570px;
+  left: 402px;
 }
 
 .work-schedule-table th:nth-child(5),
 .work-schedule-table td:nth-child(5) {
-  left: 690px;
+  left: 622px;
+}
+
+.work-schedule-table th:nth-child(6),
+.work-schedule-table td:nth-child(6) {
+  left: 742px;
   box-shadow: 2px 0 0 #d9e3f2;
 }
 
-.work-schedule-table th:nth-child(n+6),
-.work-schedule-table td:nth-child(n+6) {
+.work-schedule-table th:nth-child(n+7),
+.work-schedule-table td:nth-child(n+7) {
   width: 182px;
   min-width: 182px;
   max-width: 182px;
@@ -757,32 +768,38 @@ tr.row-wfo {
   min-width: 150px;
 }
 
-.table-wrap table:not(.work-schedule-table) th:nth-child(1),
-.table-wrap table:not(.work-schedule-table) td:nth-child(1) {
+.work-setup-table th:nth-child(1),
+.work-setup-table td:nth-child(1) {
+  width: 52px;
+  min-width: 52px;
+}
+
+.work-setup-table th:nth-child(2),
+.work-setup-table td:nth-child(2) {
   width: 130px;
   min-width: 130px;
 }
 
-.table-wrap table:not(.work-schedule-table) th:nth-child(4),
-.table-wrap table:not(.work-schedule-table) td:nth-child(4) {
+.work-setup-table th:nth-child(5),
+.work-setup-table td:nth-child(5) {
   width: 94px;
   min-width: 94px;
 }
 
-.table-wrap table:not(.work-schedule-table) th:nth-child(5),
-.table-wrap table:not(.work-schedule-table) td:nth-child(5) {
+.work-setup-table th:nth-child(6),
+.work-setup-table td:nth-child(6) {
   width: 118px;
   min-width: 118px;
 }
 
-.table-wrap table:not(.work-schedule-table) th:nth-child(6),
-.table-wrap table:not(.work-schedule-table) td:nth-child(6) {
+.work-setup-table th:nth-child(7),
+.work-setup-table td:nth-child(7) {
   width: 84px;
   min-width: 84px;
 }
 
-.table-wrap table:not(.work-schedule-table) th:nth-child(8),
-.table-wrap table:not(.work-schedule-table) td:nth-child(8) {
+.work-setup-table th:nth-child(9),
+.work-setup-table td:nth-child(9) {
   width: 126px;
   min-width: 126px;
 }
@@ -941,13 +958,59 @@ tr.row-wfo {
   text-align: center;
 }
 
-.table-wrap table:not(.work-schedule-table) th:nth-child(8),
-.table-wrap table:not(.work-schedule-table) td:nth-child(8),
-.table-wrap table:not(.work-schedule-table) th:nth-child(11),
-.table-wrap table:not(.work-schedule-table) td:nth-child(11),
-.table-wrap table:not(.work-schedule-table) th:nth-child(13),
-.table-wrap table:not(.work-schedule-table) td:nth-child(13) {
+.work-setup-table th:nth-child(9),
+.work-setup-table td:nth-child(9),
+.work-setup-table th:nth-child(12),
+.work-setup-table td:nth-child(12),
+.work-setup-table th:nth-child(14),
+.work-setup-table td:nth-child(14) {
   border-left: 2px solid var(--border);
+}
+
+.sheet-column-letters-row th,
+.sheet-main-header-row th {
+  text-align: center;
+}
+
+.sheet-column-letters-row th {
+  background: #f8fbff;
+  color: #4f5f79;
+  font-size: 0.78rem;
+  font-weight: 700;
+  top: 0;
+  z-index: 10;
+}
+
+.sheet-main-header-row th {
+  top: 34px;
+  z-index: 9;
+}
+
+.sheet-corner-cell,
+.sheet-row-number-header,
+.sheet-row-number {
+  text-align: center;
+  font-weight: 700;
+  color: #4f5f79;
+  background: #f8fbff;
+}
+
+.sheet-col-letter,
+.sheet-row-number {
+  cursor: pointer;
+  user-select: none;
+}
+
+.sheet-selected-col-header,
+.sheet-selected-row-header,
+.sheet-selected-cell {
+  background: #dbeafe !important;
+  color: #1e3a8a !important;
+}
+
+.sheet-selected-col,
+.sheet-selected-row {
+  background: #eff6ff !important;
 }
 
 .processing-time-input {
