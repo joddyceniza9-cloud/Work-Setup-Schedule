@@ -338,6 +338,51 @@ p {
   flex-wrap: wrap;
 }
 
+.bulk-actions-wrap {
+  position: relative;
+}
+
+.bulk-actions-btn {
+  min-width: 118px;
+}
+
+.bulk-actions-menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 230px;
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  z-index: 35;
+}
+
+.bulk-actions-menu.hidden {
+  display: none;
+}
+
+.bulk-action-menu-item {
+  width: 100%;
+  text-align: left;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  padding: 8px 10px;
+  background: transparent;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.bulk-action-menu-item:hover,
+.bulk-action-menu-item:focus-visible {
+  background: #f4f8ff;
+  border-color: color-mix(in srgb, var(--primary) 26%, var(--border) 74%);
+  outline: none;
+}
+
 .table-title {
   display: flex;
   flex-direction: column;
@@ -1229,6 +1274,63 @@ input[type="color"]::-moz-color-swatch,
   max-height: min(88vh, 920px);
   display: flex;
   flex-direction: column;
+}
+
+.bulk-action-card {
+  width: min(980px, 96vw);
+  max-width: min(980px, 96vw);
+  max-height: min(90vh, 960px);
+}
+
+.bulk-action-modal-header {
+  margin-bottom: 8px;
+}
+
+.bulk-action-close-btn {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--muted);
+  font-size: 1.2rem;
+  line-height: 1;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.bulk-action-close-btn:hover,
+.bulk-action-close-btn:focus-visible {
+  border-color: color-mix(in srgb, var(--primary) 38%, var(--border) 62%);
+  color: var(--text);
+  outline: none;
+}
+
+.bulk-action-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.bulk-action-selection-grid {
+  max-height: 340px;
+}
+
+.bulk-action-alert-box {
+  min-height: 170px;
+}
+
+@media (max-width: 900px) {
+  .bulk-action-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .bulk-actions-menu {
+    right: auto;
+    left: 0;
+  }
 }
 
 .settings-detail-modal .settings-list:first-child {
