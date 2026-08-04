@@ -519,7 +519,7 @@ const BULK_ACTION_CONFIG = {
     manualWfh: { label: "Manual WFH", requiresRemarks: true, remarksLabel: "Reason for WFH" },
     undoManual: { label: "Undo Manual", requiresRemarks: false, remarksLabel: "" },
     changeSchedule: { label: "Change Schedule", requiresRemarks: true, remarksLabel: "Reason for Change Schedule" },
-    useCredit: { label: "Use Credit", requiresRemarks: false, remarksLabel: "" },
+    useCredit: { label: "Use WFH Credit", requiresRemarks: false, remarksLabel: "" },
     wfoDone: { label: "(WFO) Done", requiresRemarks: false, remarksLabel: "" },
     wfoUndo: { label: "(WFO) Undo", requiresRemarks: false, remarksLabel: "" },
     removeWorkSetup: { label: "Remove Work Setup", requiresRemarks: false, remarksLabel: "" },
@@ -7570,7 +7570,7 @@ function renderTable() {
         if (canUseCredit) {
             const creditButton = document.createElement("button");
             creditButton.className = "secondary-btn";
-            creditButton.textContent = "Use Credit";
+            creditButton.textContent = "Use WFH Credit";
             creditButton.addEventListener("click", () => {
                 updateRow(row.employeeId, row.id, "wfoWave", "Use WFH Credit");
             });
