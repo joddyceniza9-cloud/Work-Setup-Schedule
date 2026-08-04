@@ -495,6 +495,7 @@ let manualWfoPendingEmployeeId = "";
 let manualWfoPendingRowId = "";
 let manualWfhPendingEmployeeId = "";
 let manualWfhPendingRowId = "";
+let tabDragSourceEmployeeId = "";
 let activeBulkActionType = "";
 let reportPreviewMode = "workSetup";
 let selectedAdminAccountId = "";
@@ -520,6 +521,10 @@ function createSpreadsheetSelectionBucket() {
         rows: new Set(),
         cols: new Set(),
         cells: new Set(),
+        activeCellKey: null,
+        anchorCell: null,
+        anchorRow: null,
+        anchorCol: null,
     };
 }
 
@@ -527,6 +532,8 @@ const spreadsheetSelectionState = {
     workSetup: createSpreadsheetSelectionBucket(),
     workSchedule: createSpreadsheetSelectionBucket(),
 };
+let activeSpreadsheetDrag = null;
+let spreadsheetGlobalPointerBound = false;
 const WFH_CREDIT_LEAVE_OPTIONS = ["OFF", "ML", "PL", "TL", "VL", "PH", "TH"];
 const WFH_UNAPPROVED_LEAVE_VALUES = new Set(WFH_CREDIT_LEAVE_OPTIONS);
 const DASHBOARD_METRIC_DEFINITIONS = [
@@ -887,12 +894,432 @@ function getSpreadsheetSelectionBucket(tableKey) {
     return bucket;
 }
 
+function cloneSpreadsheetSelectionSets(selection) {
+    return {
+        rows: new Set(selection.rows),
+        cols: new Set(selection.cols),
+        cells: new Set(selection.cells),
+    };
+}
+
+function clearSpreadsheetSelectionSets(selection) {
+    selection.rows.clear();
+    selection.cols.clear();
+    selection.cells.clear();
+}
+
+function applySpreadsheetSelectionSets(selection, snapshot) {
+    clearSpreadsheetSelectionSets(selection);
+    snapshot.rows.forEach((value) => selection.rows.add(value));
+    snapshot.cols.forEach((value) => selection.cols.add(value));
+    snapshot.cells.forEach((value) => selection.cells.add(value));
+}
+
+function getSpreadsheetAnchor(selection, kind) {
+    if (kind === "cell") {
+        return selection.anchorCell;
+    }
+    if (kind === "row") {
+        return selection.anchorRow;
+    }
+    if (kind === "col") {
+        return selection.anchorCol;
+    }
+    return null;
+}
+
+function setSpreadsheetAnchor(selection, kind, position) {
+    if (kind === "cell") {
+        selection.anchorCell = {
+            rowIndex: Number(position?.rowIndex) || 0,
+            colIndex: Number(position?.colIndex) || 0,
+        };
+        return;
+    }
+    if (kind === "row") {
+        selection.anchorRow = {
+            rowIndex: Number(position?.rowIndex) || 0,
+        };
+        return;
+    }
+    if (kind === "col") {
+        selection.anchorCol = {
+            colIndex: Number(position?.colIndex) || 0,
+        };
+    }
+}
+
+function addSpreadsheetItem(selection, kind, position) {
+    if (kind === "cell") {
+        const rowIndex = Number(position?.rowIndex) || 0;
+        const colIndex = Number(position?.colIndex) || 0;
+        if (rowIndex < 1 || colIndex < 1) {
+            return;
+        }
+        selection.cells.add(`${rowIndex}:${colIndex}`);
+        return;
+    }
+    if (kind === "row") {
+        const rowIndex = Number(position?.rowIndex) || 0;
+        if (rowIndex < 1) {
+            return;
+        }
+        selection.rows.add(String(rowIndex));
+        return;
+    }
+    if (kind === "col") {
+        const colIndex = Number(position?.colIndex) || 0;
+        if (colIndex < 1) {
+            return;
+        }
+        selection.cols.add(String(colIndex));
+    }
+}
+
+function toggleSpreadsheetItem(selection, kind, position) {
+    if (kind === "cell") {
+        const rowIndex = Number(position?.rowIndex) || 0;
+        const colIndex = Number(position?.colIndex) || 0;
+        if (rowIndex < 1 || colIndex < 1) {
+            return;
+        }
+        const key = `${rowIndex}:${colIndex}`;
+        if (selection.cells.has(key)) {
+            selection.cells.delete(key);
+        } else {
+            selection.cells.add(key);
+        }
+        return;
+    }
+    if (kind === "row") {
+        const rowIndex = Number(position?.rowIndex) || 0;
+        if (rowIndex < 1) {
+            return;
+        }
+        const key = String(rowIndex);
+        if (selection.rows.has(key)) {
+            selection.rows.delete(key);
+        } else {
+            selection.rows.add(key);
+        }
+        return;
+    }
+    if (kind === "col") {
+        const colIndex = Number(position?.colIndex) || 0;
+        if (colIndex < 1) {
+            return;
+        }
+        const key = String(colIndex);
+        if (selection.cols.has(key)) {
+            selection.cols.delete(key);
+        } else {
+            selection.cols.add(key);
+        }
+    }
+}
+
+function addSpreadsheetRange(selection, kind, startPosition, endPosition) {
+    if (!startPosition || !endPosition) {
+        return;
+    }
+
+    if (kind === "cell") {
+        const startRow = Number(startPosition.rowIndex) || 0;
+        const startCol = Number(startPosition.colIndex) || 0;
+        const endRow = Number(endPosition.rowIndex) || 0;
+        const endCol = Number(endPosition.colIndex) || 0;
+        if (startRow < 1 || startCol < 1 || endRow < 1 || endCol < 1) {
+            return;
+        }
+        const rowMin = Math.min(startRow, endRow);
+        const rowMax = Math.max(startRow, endRow);
+        const colMin = Math.min(startCol, endCol);
+        const colMax = Math.max(startCol, endCol);
+        for (let row = rowMin; row <= rowMax; row += 1) {
+            for (let col = colMin; col <= colMax; col += 1) {
+                selection.cells.add(`${row}:${col}`);
+            }
+        }
+        return;
+    }
+
+    if (kind === "row") {
+        const startRow = Number(startPosition.rowIndex) || 0;
+        const endRow = Number(endPosition.rowIndex) || 0;
+        if (startRow < 1 || endRow < 1) {
+            return;
+        }
+        const min = Math.min(startRow, endRow);
+        const max = Math.max(startRow, endRow);
+        for (let row = min; row <= max; row += 1) {
+            selection.rows.add(String(row));
+        }
+        return;
+    }
+
+    if (kind === "col") {
+        const startCol = Number(startPosition.colIndex) || 0;
+        const endCol = Number(endPosition.colIndex) || 0;
+        if (startCol < 1 || endCol < 1) {
+            return;
+        }
+        const min = Math.min(startCol, endCol);
+        const max = Math.max(startCol, endCol);
+        for (let col = min; col <= max; col += 1) {
+            selection.cols.add(String(col));
+        }
+    }
+}
+
+function parseSpreadsheetTarget(tableElement, targetElement) {
+    const cornerCell = targetElement.closest("thead th.sheet-corner-cell");
+    if (cornerCell && tableElement.contains(cornerCell)) {
+        return { kind: "clear", position: null };
+    }
+
+    const colHeader = targetElement.closest("thead th.sheet-col-letter");
+    if (colHeader && tableElement.contains(colHeader)) {
+        return {
+            kind: "col",
+            position: { colIndex: Number(colHeader.dataset.sheetColIndex) || 0 },
+        };
+    }
+
+    const rowHeader = targetElement.closest("tbody td.sheet-row-number");
+    if (rowHeader && tableElement.contains(rowHeader)) {
+        return {
+            kind: "row",
+            position: { rowIndex: Number(rowHeader.dataset.sheetRowIndex) || 0 },
+        };
+    }
+
+    const cell = targetElement.closest("tbody td.sheet-cell");
+    if (cell && tableElement.contains(cell)) {
+        const row = cell.closest("tr");
+        return {
+            kind: "cell",
+            position: {
+                rowIndex: Number(row?.dataset.sheetRowIndex) || 0,
+                colIndex: Number(cell.dataset.sheetColIndex) || 0,
+            },
+        };
+    }
+
+    return null;
+}
+
+function getDragPositionForKind(tableElement, kind, targetElement) {
+    if (kind === "cell") {
+        const cell = targetElement.closest("tbody td.sheet-cell");
+        if (!cell || !tableElement.contains(cell)) {
+            return null;
+        }
+        const row = cell.closest("tr");
+        return {
+            rowIndex: Number(row?.dataset.sheetRowIndex) || 0,
+            colIndex: Number(cell.dataset.sheetColIndex) || 0,
+        };
+    }
+
+    if (kind === "row") {
+        const row = targetElement.closest("tbody tr[data-sheet-row-index]");
+        if (!row || !tableElement.contains(row)) {
+            return null;
+        }
+        return {
+            rowIndex: Number(row.dataset.sheetRowIndex) || 0,
+        };
+    }
+
+    if (kind === "col") {
+        const colElement = targetElement.closest("[data-sheet-col-index]");
+        if (!colElement || !tableElement.contains(colElement)) {
+            return null;
+        }
+        return {
+            colIndex: Number(colElement.dataset.sheetColIndex) || 0,
+        };
+    }
+
+    return null;
+}
+
+function getSpreadsheetBounds(tableElement) {
+    const rowCount = tableElement
+        ? tableElement.querySelectorAll("tbody tr[data-sheet-row-index]").length
+        : 0;
+    const colCount = tableElement
+        ? tableElement.querySelectorAll("thead th.sheet-col-letter[data-sheet-col-index]").length
+        : 0;
+    return {
+        rowCount: Math.max(0, rowCount),
+        colCount: Math.max(0, colCount),
+    };
+}
+
+function getSpreadsheetScrollContainer(tableElement) {
+    return tableElement?.closest(".table-wrap") || null;
+}
+
+function autoScrollSpreadsheetContainer(tableElement, clientX, clientY) {
+    const container = getSpreadsheetScrollContainer(tableElement);
+    if (!container) {
+        return false;
+    }
+    const rect = container.getBoundingClientRect();
+    const threshold = 28;
+    const step = 20;
+    let deltaX = 0;
+    let deltaY = 0;
+
+    if (clientX <= rect.left + threshold) {
+        deltaX = -step;
+    } else if (clientX >= rect.right - threshold) {
+        deltaX = step;
+    }
+
+    if (clientY <= rect.top + threshold) {
+        deltaY = -step;
+    } else if (clientY >= rect.bottom - threshold) {
+        deltaY = step;
+    }
+
+    if (!deltaX && !deltaY) {
+        return false;
+    }
+
+    container.scrollLeft += deltaX;
+    container.scrollTop += deltaY;
+    return true;
+}
+
+function getSpreadsheetTableKeyFromElement(element) {
+    const table = element?.closest("#workSetupTable, #workScheduleTable") || null;
+    if (!table) {
+        return "";
+    }
+    return table.id === "workScheduleTable" ? "workSchedule" : "workSetup";
+}
+
+function getSpreadsheetCellPositionFromElement(element) {
+    const cell = element?.closest("td.sheet-cell") || null;
+    if (!cell) {
+        return null;
+    }
+    const row = cell.closest("tr[data-sheet-row-index]");
+    if (!row) {
+        return null;
+    }
+    return {
+        rowIndex: Number(row.dataset.sheetRowIndex) || 0,
+        colIndex: Number(cell.dataset.sheetColIndex) || 0,
+    };
+}
+
+function moveSpreadsheetCellPosition(tableElement, position, key) {
+    if (!position) {
+        return null;
+    }
+    const bounds = getSpreadsheetBounds(tableElement);
+    if (!bounds.rowCount || !bounds.colCount) {
+        return null;
+    }
+    let nextRow = Number(position.rowIndex) || 0;
+    let nextCol = Number(position.colIndex) || 0;
+    if (key === "ArrowUp") {
+        nextRow -= 1;
+    } else if (key === "ArrowDown") {
+        nextRow += 1;
+    } else if (key === "ArrowLeft") {
+        nextCol -= 1;
+    } else if (key === "ArrowRight") {
+        nextCol += 1;
+    }
+
+    nextRow = Math.max(1, Math.min(bounds.rowCount, nextRow));
+    nextCol = Math.max(1, Math.min(bounds.colCount, nextCol));
+    if (nextRow === position.rowIndex && nextCol === position.colIndex) {
+        return null;
+    }
+    return {
+        rowIndex: nextRow,
+        colIndex: nextCol,
+    };
+}
+
+function applySpreadsheetSelectionAction(tableKey, kind, position, modifiers = {}) {
+    const selection = getSpreadsheetSelectionBucket(tableKey);
+    if (kind === "clear") {
+        clearSpreadsheetSelectionSets(selection);
+        selection.activeCellKey = null;
+        selection.anchorCell = null;
+        selection.anchorRow = null;
+        selection.anchorCol = null;
+        applySpreadsheetSelection(tableKey);
+        return;
+    }
+
+    if (!position) {
+        return;
+    }
+
+    const ctrlPressed = Boolean(modifiers.ctrlKey);
+    const shiftPressed = Boolean(modifiers.shiftKey);
+    const cellKey = kind === "cell"
+        ? `${Number(position.rowIndex) || 0}:${Number(position.colIndex) || 0}`
+        : "";
+    const existingAnchor = getSpreadsheetAnchor(selection, kind);
+
+    if (ctrlPressed && shiftPressed) {
+        const anchor = existingAnchor || position;
+        addSpreadsheetRange(selection, kind, anchor, position);
+    } else if (shiftPressed) {
+        const anchor = existingAnchor || position;
+        clearSpreadsheetSelectionSets(selection);
+        addSpreadsheetRange(selection, kind, anchor, position);
+    } else if (ctrlPressed) {
+        toggleSpreadsheetItem(selection, kind, position);
+    } else {
+        clearSpreadsheetSelectionSets(selection);
+        addSpreadsheetItem(selection, kind, position);
+    }
+
+    if (kind === "cell") {
+        if (selection.cells.has(cellKey)) {
+            selection.activeCellKey = cellKey;
+        } else if (selection.activeCellKey === cellKey) {
+            selection.activeCellKey = selection.cells.values().next().value || null;
+        }
+    } else if (!selection.cells.size) {
+        selection.activeCellKey = null;
+    }
+
+    if (!shiftPressed || !existingAnchor) {
+        setSpreadsheetAnchor(selection, kind, position);
+    }
+    applySpreadsheetSelection(tableKey);
+}
+
+function applySpreadsheetDragSelection(dragState, currentPosition) {
+    if (!dragState || !currentPosition) {
+        return;
+    }
+    const selection = getSpreadsheetSelectionBucket(dragState.tableKey);
+    applySpreadsheetSelectionSets(selection, dragState.baseSnapshot);
+    addSpreadsheetRange(selection, dragState.kind, dragState.startPosition, currentPosition);
+    if (dragState.kind === "cell") {
+        selection.activeCellKey = `${Number(currentPosition.rowIndex) || 0}:${Number(currentPosition.colIndex) || 0}`;
+    }
+    setSpreadsheetAnchor(selection, dragState.kind, currentPosition);
+    applySpreadsheetSelection(dragState.tableKey);
+}
+
 function clearSpreadsheetSelectionClasses(tableElement) {
     if (!tableElement) {
         return;
     }
     tableElement.querySelectorAll(
-        ".sheet-selected-cell, .sheet-selected-col, .sheet-selected-row, .sheet-selected-col-header, .sheet-selected-row-header",
+        ".sheet-selected-cell, .sheet-selected-col, .sheet-selected-row, .sheet-selected-col-header, .sheet-selected-row-header, .sheet-active-cell",
     ).forEach((element) => {
         element.classList.remove(
             "sheet-selected-cell",
@@ -900,6 +1327,7 @@ function clearSpreadsheetSelectionClasses(tableElement) {
             "sheet-selected-row",
             "sheet-selected-col-header",
             "sheet-selected-row-header",
+            "sheet-active-cell",
         );
     });
 }
@@ -947,6 +1375,9 @@ function applySpreadsheetSelection(tableKey) {
         const labelHeader = tableElement.querySelector(`thead th.sheet-header-label[data-sheet-col-index=\"${colIndex}\"]`);
         if (cell) {
             cell.classList.add("sheet-selected-cell");
+            if (selection.activeCellKey === cellKey) {
+                cell.classList.add("sheet-active-cell");
+            }
         }
         if (rowHeader) {
             rowHeader.classList.add("sheet-selected-row-header");
@@ -960,107 +1391,96 @@ function applySpreadsheetSelection(tableKey) {
     });
 }
 
-function toggleSpreadsheetSelection(tableKey, type, payload) {
-    const selection = getSpreadsheetSelectionBucket(tableKey);
-
-    if (type === "clear") {
-        selection.rows.clear();
-        selection.cols.clear();
-        selection.cells.clear();
-        applySpreadsheetSelection(tableKey);
-        return;
-    }
-
-    if (type === "row") {
-        const rowIndex = Number(payload?.rowIndex) || 0;
-        if (rowIndex < 1) {
-            return;
-        }
-        const key = String(rowIndex);
-        if (selection.rows.has(key)) {
-            selection.rows.delete(key);
-        } else {
-            selection.rows.add(key);
-        }
-        applySpreadsheetSelection(tableKey);
-        return;
-    }
-
-    if (type === "col") {
-        const colIndex = Number(payload?.colIndex) || 0;
-        if (colIndex < 1) {
-            return;
-        }
-        const key = String(colIndex);
-        if (selection.cols.has(key)) {
-            selection.cols.delete(key);
-        } else {
-            selection.cols.add(key);
-        }
-        applySpreadsheetSelection(tableKey);
-        return;
-    }
-
-    if (type === "cell") {
-        const rowIndex = Number(payload?.rowIndex) || 0;
-        const colIndex = Number(payload?.colIndex) || 0;
-        if (rowIndex < 1 || colIndex < 1) {
-            return;
-        }
-        const key = `${rowIndex}:${colIndex}`;
-        if (selection.cells.has(key)) {
-            selection.cells.delete(key);
-        } else {
-            selection.cells.add(key);
-        }
-    }
-
-    applySpreadsheetSelection(tableKey);
-}
-
 function bindSpreadsheetTableInteractions(tableKey) {
     const tableElement = getSpreadsheetTableElement(tableKey);
     if (!tableElement || tableElement.dataset.spreadsheetBound === "true") {
         return;
     }
 
+    if (!spreadsheetGlobalPointerBound) {
+        document.addEventListener("mouseup", () => {
+            activeSpreadsheetDrag = null;
+            document.body.classList.remove("sheet-dragging-selection");
+        });
+        document.addEventListener("mousemove", (event) => {
+            if (!activeSpreadsheetDrag) {
+                return;
+            }
+            autoScrollSpreadsheetContainer(activeSpreadsheetDrag.tableElement, event.clientX, event.clientY);
+            const elementUnderPointer = document.elementFromPoint(event.clientX, event.clientY);
+            if (!(elementUnderPointer instanceof Element)) {
+                return;
+            }
+            const currentPosition = getDragPositionForKind(
+                activeSpreadsheetDrag.tableElement,
+                activeSpreadsheetDrag.kind,
+                elementUnderPointer,
+            );
+            if (!currentPosition) {
+                return;
+            }
+            applySpreadsheetDragSelection(activeSpreadsheetDrag, currentPosition);
+        });
+        spreadsheetGlobalPointerBound = true;
+    }
+
     tableElement.dataset.spreadsheetBound = "true";
-    tableElement.addEventListener("click", (event) => {
+    tableElement.addEventListener("mousedown", (event) => {
+        if (event.button !== 0) {
+            return;
+        }
         const target = event.target;
         if (!(target instanceof Element)) {
             return;
         }
 
-        const cornerCell = target.closest("thead th.sheet-corner-cell");
-        if (cornerCell && tableElement.contains(cornerCell)) {
-            toggleSpreadsheetSelection(tableKey, "clear");
+        // Keep original form behavior for editable controls inside cells.
+        const interactiveControl = target.closest("input, select, textarea, button, a, [contenteditable='true']");
+        if (interactiveControl && tableElement.contains(interactiveControl)) {
+            activeSpreadsheetDrag = null;
+            document.body.classList.remove("sheet-dragging-selection");
             return;
         }
 
-        const colHeader = target.closest("thead th.sheet-col-letter");
-        if (colHeader && tableElement.contains(colHeader)) {
-            toggleSpreadsheetSelection(tableKey, "col", {
-                colIndex: Number(colHeader.dataset.sheetColIndex) || 0,
-            });
+        const parsed = parseSpreadsheetTarget(tableElement, target);
+        if (!parsed) {
             return;
         }
 
-        const rowHeader = target.closest("tbody td.sheet-row-number");
-        if (rowHeader && tableElement.contains(rowHeader)) {
-            toggleSpreadsheetSelection(tableKey, "row", {
-                rowIndex: Number(rowHeader.dataset.sheetRowIndex) || 0,
-            });
+        if (parsed.kind === "clear") {
+            applySpreadsheetSelectionAction(tableKey, "clear", null, event);
+            event.preventDefault();
             return;
         }
 
-        const dataCell = target.closest("tbody td.sheet-cell");
-        if (dataCell && tableElement.contains(dataCell)) {
-            const rowElement = dataCell.closest("tr");
-            toggleSpreadsheetSelection(tableKey, "cell", {
-                rowIndex: Number(rowElement?.dataset.sheetRowIndex) || 0,
-                colIndex: Number(dataCell.dataset.sheetColIndex) || 0,
-            });
+        applySpreadsheetSelectionAction(tableKey, parsed.kind, parsed.position, event);
+        event.preventDefault();
+
+        activeSpreadsheetDrag = {
+            tableKey,
+            tableElement,
+            kind: parsed.kind,
+            startPosition: parsed.position,
+            baseSnapshot: event.ctrlKey
+                ? cloneSpreadsheetSelectionSets(getSpreadsheetSelectionBucket(tableKey))
+                : { rows: new Set(), cols: new Set(), cells: new Set() },
+        };
+        document.body.classList.add("sheet-dragging-selection");
+    });
+
+    tableElement.addEventListener("mouseover", (event) => {
+        if (!activeSpreadsheetDrag || activeSpreadsheetDrag.tableKey !== tableKey) {
+            return;
         }
+        const target = event.target;
+        if (!(target instanceof Element)) {
+            return;
+        }
+        const currentPosition = getDragPositionForKind(tableElement, activeSpreadsheetDrag.kind, target);
+        if (!currentPosition) {
+            return;
+        }
+        applySpreadsheetDragSelection(activeSpreadsheetDrag, currentPosition);
     });
 }
 
@@ -4059,7 +4479,7 @@ function renderWorkScheduleTable() {
             return true;
         }
         return normalizeSubtradeValue(employee?.subtrade || "") === normalizeSubtradeValue(selectedSubtrade);
-    });
+    }).filter((employee) => activeTab === "all" || employee.id === activeTab);
 
     if (!employees.length || !dateValues.length) {
         const emptyRow = document.createElement("tr");
@@ -7527,21 +7947,31 @@ function closeFilterMenus() {
     }
 }
 
-function renderTabs() {
-    const tabs = document.getElementById("tabs");
-    tabs.innerHTML = "";
-
-    const selectedSubtrade = `${state.selectedSubtrade || "all"}`.trim() || "all";
-    const tabEmployees = getVisibleEmployees().filter((employee) => {
-        if (selectedSubtrade === "all") {
-            return true;
-        }
-        return normalizeSubtradeValue(employee?.subtrade || "") === normalizeSubtradeValue(selectedSubtrade);
-    });
-
-    if (activeTab !== "all" && !tabEmployees.some((employee) => employee.id === activeTab)) {
-        activeTab = "all";
+function moveEmployeeTabOrder(draggedEmployeeId, targetEmployeeId) {
+    const draggedId = `${draggedEmployeeId || ""}`.trim();
+    const targetId = `${targetEmployeeId || ""}`.trim();
+    if (!draggedId || !targetId || draggedId === targetId) {
+        return false;
     }
+
+    const draggedIndex = state.employees.findIndex((entry) => entry.id === draggedId);
+    const targetIndex = state.employees.findIndex((entry) => entry.id === targetId);
+    if (draggedIndex < 0 || targetIndex < 0) {
+        return false;
+    }
+
+    const [draggedEmployee] = state.employees.splice(draggedIndex, 1);
+    const nextTargetIndex = state.employees.findIndex((entry) => entry.id === targetId);
+    state.employees.splice(nextTargetIndex, 0, draggedEmployee);
+    saveState();
+    return true;
+}
+
+function buildEmployeeTabsInto(container, tabEmployees) {
+    if (!container) {
+        return;
+    }
+    container.innerHTML = "";
 
     const allButton = document.createElement("button");
     allButton.className = `tab-btn ${activeTab === "all" ? "active" : ""}`;
@@ -7550,7 +7980,7 @@ function renderTabs() {
         activeTab = "all";
         render();
     });
-    tabs.appendChild(allButton);
+    container.appendChild(allButton);
 
     const addButton = document.createElement("button");
     addButton.className = "tab-btn tab-add-btn";
@@ -7558,17 +7988,59 @@ function renderTabs() {
     addButton.title = "Add employee";
     addButton.setAttribute("aria-label", "Add employee");
     addButton.addEventListener("click", addEmployeeFromTabs);
-    tabs.appendChild(addButton);
+    container.appendChild(addButton);
 
     tabEmployees.forEach((employee) => {
         const button = document.createElement("button");
         button.className = `tab-btn ${activeTab === employee.id ? "active" : ""}`;
         button.type = "button";
+        button.dataset.employeeId = employee.id;
+        button.draggable = true;
         const employeeColor = normalizeEmployeeColor(employee.employeeColor);
         if (activeTab === employee.id) {
             button.style.backgroundColor = employeeColor;
             button.style.color = getReadableTextColor(employeeColor);
         }
+
+        button.addEventListener("dragstart", (event) => {
+            tabDragSourceEmployeeId = employee.id;
+            button.classList.add("tab-dragging");
+            if (event.dataTransfer) {
+                event.dataTransfer.effectAllowed = "move";
+                event.dataTransfer.setData("text/plain", employee.id);
+            }
+        });
+
+        button.addEventListener("dragend", () => {
+            tabDragSourceEmployeeId = "";
+            button.classList.remove("tab-dragging");
+            document.querySelectorAll(".tab-drag-over").forEach((entry) => entry.classList.remove("tab-drag-over"));
+        });
+
+        button.addEventListener("dragover", (event) => {
+            if (!tabDragSourceEmployeeId || tabDragSourceEmployeeId === employee.id) {
+                return;
+            }
+            event.preventDefault();
+            button.classList.add("tab-drag-over");
+        });
+
+        button.addEventListener("dragleave", () => {
+            button.classList.remove("tab-drag-over");
+        });
+
+        button.addEventListener("drop", (event) => {
+            event.preventDefault();
+            button.classList.remove("tab-drag-over");
+            const draggedId = (event.dataTransfer?.getData("text/plain") || tabDragSourceEmployeeId || "").trim();
+            if (!draggedId || draggedId === employee.id) {
+                return;
+            }
+            const moved = moveEmployeeTabOrder(draggedId, employee.id);
+            if (moved) {
+                render();
+            }
+        });
 
         const avatar = createEmployeeAvatarElement(employee, { size: 24, className: "tab-employee-avatar" });
         button.appendChild(avatar);
@@ -7593,8 +8065,32 @@ function renderTabs() {
             activeTab = employee.id;
             render();
         });
-        tabs.appendChild(button);
+
+        container.appendChild(button);
     });
+}
+
+function renderTabs() {
+    const tabs = document.getElementById("tabs");
+    const workScheduleTabs = document.getElementById("workScheduleTabs");
+    if (!tabs) {
+        return;
+    }
+
+    const selectedSubtrade = `${state.selectedSubtrade || "all"}`.trim() || "all";
+    const tabEmployees = getVisibleEmployees().filter((employee) => {
+        if (selectedSubtrade === "all") {
+            return true;
+        }
+        return normalizeSubtradeValue(employee?.subtrade || "") === normalizeSubtradeValue(selectedSubtrade);
+    });
+
+    if (activeTab !== "all" && !tabEmployees.some((employee) => employee.id === activeTab)) {
+        activeTab = "all";
+    }
+
+    buildEmployeeTabsInto(tabs, tabEmployees);
+    buildEmployeeTabsInto(workScheduleTabs, tabEmployees);
 }
 
 function renderTable() {
@@ -10358,6 +10854,24 @@ function setupTableArrowNavigation() {
         const target = event.target;
         if (!(target instanceof HTMLElement) || target.isContentEditable) {
             return;
+        }
+
+        if (event.shiftKey && key.startsWith("Arrow")) {
+            const tableKey = getSpreadsheetTableKeyFromElement(target);
+            if (tableKey) {
+                const tableElement = getSpreadsheetTableElement(tableKey);
+                const currentPosition = getSpreadsheetCellPositionFromElement(target);
+                const nextPosition = moveSpreadsheetCellPosition(tableElement, currentPosition, key);
+                if (nextPosition) {
+                    applySpreadsheetSelectionAction(tableKey, "cell", nextPosition, {
+                        ctrlKey: Boolean(event.ctrlKey),
+                        shiftKey: true,
+                    });
+                    event.preventDefault();
+                    event.stopPropagation();
+                    return;
+                }
+            }
         }
 
         const cell = target.closest("td");
