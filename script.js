@@ -4075,9 +4075,9 @@ function addManualWfhCreditRule() {
     if (!requireLoggedInUser()) {
         return;
     }
-    const employeeSelect = document.getElementById("manualCreditEmployeeSelect");
+    const employeeList = document.getElementById("manualCreditEmployeeList");
     const occurrenceInput = document.getElementById("manualCreditOccurrenceInput");
-    if (!employeeSelect || !occurrenceInput) {
+    if (!employeeList || !occurrenceInput) {
         return;
     }
 
